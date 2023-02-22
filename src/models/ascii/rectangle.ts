@@ -7,6 +7,17 @@ export default class Rectangle {
   erasedPos = new Map<string, number>()
 
   constructor(fillColor: string, leftX: number, topY: number, rightX: number, bottomY: number) {
+    if (leftX > rightX) {
+      const tmp = rightX
+      rightX = leftX
+      leftX = tmp
+    }
+    if (topY > bottomY) {
+      const tmp = bottomY
+      bottomY = topY
+      topY = tmp
+    }
+
     this.leftX = leftX
     this.topY = topY
     this.rightX = rightX
