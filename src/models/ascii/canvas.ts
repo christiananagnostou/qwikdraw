@@ -42,6 +42,16 @@ export default class Canvas {
   }
 
   drawRectangle(fillColor: string, leftX: number, topY: number, rightX: number, bottomY: number) {
+    if (leftX > rightX) {
+      const tmp = rightX
+      rightX = leftX
+      leftX = tmp
+    }
+    if (topY > bottomY) {
+      const tmp = bottomY
+      bottomY = topY
+      topY = tmp
+    }
     this.shapes.push(new Rectangle(fillColor, Number(leftX), Number(topY), Number(rightX), Number(bottomY)))
 
     this.saveState()
