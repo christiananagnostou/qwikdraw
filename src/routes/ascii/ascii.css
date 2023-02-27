@@ -50,3 +50,11 @@ label {
 .cell:hover {
   filter: brightness(0.9);
 }
+
+.shape {
+  left: var(--left);
+  top: var(--top);
+  height: var(--height);
+  width: var(--width);
+  background: var(--background);
+}

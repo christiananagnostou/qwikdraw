@@ -23,7 +23,6 @@ export default class Canvas {
 
     const state = this.history.get(--this.savesCount)
     if (!state) return
-
     this.shapes = state.shapes
   }
 
@@ -32,8 +31,13 @@ export default class Canvas {
 
     const state = this.history.get(++this.savesCount)
     if (!state) return
-
     this.shapes = state.shapes
+  }
+
+  clearShapes() {
+    this.shapes = []
+
+    this.saveState()
   }
 
   resize(height: number, width: number) {

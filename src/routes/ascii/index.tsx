@@ -1,5 +1,7 @@
-import { $, component$, type QwikMouseEvent, useStore, useStylesScoped$, useTask$ } from '@builder.io/qwik'
+import { useTask$ } from '@builder.io/qwik'
+import { $, component$, type QwikMouseEvent, useStore, useStylesScoped$ } from '@builder.io/qwik'
 import { type DocumentHead } from '@builder.io/qwik-city'
+import cloneDeep from 'lodash.clonedeep'
 import Canvas from '~/models/ascii/canvas'
 import styles from './ascii.css?inline'
 
@@ -8,90 +10,185 @@ export const HEIGHT = 20
 
 export const canvas = new Canvas(HEIGHT, WIDTH)
 
+interface Rectangle {
+  fillColor: string
+  leftX: number
+  topY: number
+  rightX: number
+  bottomY: number
+  erasedPos: { [key: string]: number }
+}
+
+type Shape = Rectangle
+
+interface State {
+  mouseDownCoords: { clientX: number; clientY: number } | null
+  draggingCoords: { clientX: number; clientY: number } | null
+  selectedColor: string
+  shapes: Shape[]
+  history: { [key: number]: { shapes: Shape[] } }
+  savesCount: number
+}
+
 export default component$(() => {
   useStylesScoped$(styles)
 
-  const state = useStore({
-    command: '',
-    grid: canvas.createGrid(),
-    width: WIDTH,
-    height: HEIGHT,
-    mouseDownCoords: null as { row: number; col: number } | null,
-    draggingCoords: null as { row: number; col: number } | null,
-    selectedColor: 'red',
-  })
+  const state = useStore<State>(
+    {
+      mouseDownCoords: null,
+      draggingCoords: null,
+      selectedColor: 'red',
+      shapes: [],
+      history: {},
+      savesCount: -1,
+    },
+    { deep: true }
+  )
 
   useTask$(({ track }) => {
-    const width = track(() => state.width)
-    const height = track(() => state.height)
-    canvas.resize(height, width)
-    state.grid = canvas.createGrid()
+    track(() => state.shapes)
+    console.log(state)
   })
 
-  const handleMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>, elem: HTMLSpanElement) => {
-    const { row, col } = elem.dataset
-    if (row && col) {
-      const coords = { row: Number(row), col: Number(col) }
-      e.shiftKey ? (state.draggingCoords = coords) : (state.mouseDownCoords = coords)
+  const saveState = $(() => {
+    state.history[++state.savesCount] = cloneDeep({ shapes: state.shapes })
+  })
+
+  const undoState = $(() => {
+    if (state.savesCount === 0) return
+
+    const newState = state.history[--state.savesCount]
+    if (!newState) return
+    state.shapes = newState.shapes
+  })
+
+  const redoState = $(() => {
+    if (state.savesCount === Object(state.history).keys().length - 1) return
+
+    const newState = state.history[++state.savesCount]
+    if (!newState) return
+    state.shapes = newState.shapes
+  })
+
+  const clearShapes = $(() => {
+    state.shapes = []
+    saveState()
+  })
+
+  const moveShape = $((shape: Shape, xDiff: number, yDiff: number) => {
+    shape.leftX += xDiff
+    shape.topY += yDiff
+    shape.rightX += xDiff
+    shape.bottomY += yDiff
+  })
+
+  const addErasedPosToShape = $((shape: Shape, x: number, y: number) => {
+    shape.erasedPos[x - shape.leftX + ',' + (y - shape.topY)] = 1
+  })
+
+  const isErasedPos = $((shape: Shape, x: number, y: number) => {
+    return shape.erasedPos[x - shape.leftX + ',' + (y - shape.topY)]
+  })
+
+  const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
+    return (
+      shape.leftX <= x &&
+      shape.topY <= y &&
+      shape.rightX >= x &&
+      shape.bottomY >= y &&
+      !(await isErasedPos(shape, x, y))
+    )
+  })
+
+  const getIndexOfShapeAtPos = $(async (x: number, y: number) => {
+    let i = state.shapes.length
+    while (i--) {
+      const shape = state.shapes[i]
+      if (await shapeContainsPos(shape, x, y)) return i
     }
+    return -1
   })
 
-  const handleMouseUp = $((_: QwikMouseEvent<HTMLSpanElement, MouseEvent>, elem: HTMLSpanElement) => {
-    const { row: endRow, col: endCol } = elem.dataset
-    if (!endCol || !endRow) return
+  const getAllShapesAtPos = $((x: number, y: number) => {
+    return state.shapes.filter((shape) => shapeContainsPos(shape, x, y))
+  })
 
-    if (state.draggingCoords) {
-      const { row, col } = state.draggingCoords
-      canvas.dragAndDrop(col, row, Number(endCol), Number(endRow))
+  const drawRectangle = $((fillColor: string, leftX: number, topY: number, rightX: number, bottomY: number) => {
+    if (leftX > rightX) {
+      const tmp = rightX
+      rightX = leftX
+      leftX = tmp
     }
-    if (state.mouseDownCoords) {
-      const { row, col } = state.mouseDownCoords
-      canvas.drawRectangle(state.selectedColor, col, row, Number(endCol), Number(endRow))
+    if (topY > bottomY) {
+      const tmp = bottomY
+      bottomY = topY
+      topY = tmp
+    }
+    state.shapes.push({ fillColor, leftX, topY, rightX, bottomY, erasedPos: {} })
+
+    saveState()
+  })
+
+  const dragAndDrop = $(async (selectX: number, selectY: number, releaseX: number, releaseY: number) => {
+    const xDiff = releaseX - selectX
+    const yDiff = releaseY - selectY
+
+    const shape = state.shapes[await getIndexOfShapeAtPos(selectX, selectY)]
+    if (!shape) return
+    moveShape(shape, xDiff, yDiff)
+
+    saveState()
+  })
+
+  const eraseArea = $(async (leftX: number, topY: number, rightX: number, bottomY: number) => {
+    for (let y = topY; y <= bottomY; y++) {
+      for (let x = leftX; x <= rightX; x++) {
+        const shapes = await getAllShapesAtPos(x, y)
+        shapes.forEach((shape) => addErasedPosToShape(shape, x, y))
+      }
     }
 
-    state.grid = canvas.createGrid()
-    state.mouseDownCoords = null
-    state.draggingCoords = null
+    saveState()
   })
 
-  const handleUndo = $(() => {
-    canvas.undoState()
-    state.grid = canvas.createGrid()
+  const bringToFront = $(async (selectX: number, selectY: number) => {
+    const shapeIndex = await getIndexOfShapeAtPos(selectX, selectY)
+    if (shapeIndex > -1) {
+      const [removedShape] = state.shapes.splice(shapeIndex, 1)
+      state.shapes.push(removedShape)
+    }
+
+    saveState()
   })
 
-  const handleRedo = $(() => {
-    canvas.redoState()
-    state.grid = canvas.createGrid()
+  const handleMouseDown = $(({ clientX, clientY, shiftKey, altKey }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+    if (altKey) return
+    const coords = { clientX, clientY }
+    shiftKey ? (state.draggingCoords = coords) : (state.mouseDownCoords = coords)
   })
+
+  const handleMouseUp = $(
+    ({ clientX: endClientX, clientY: endClientY, altKey }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+      if (state.draggingCoords) {
+        const { clientX, clientY } = state.draggingCoords
+        dragAndDrop(clientX, clientY, endClientX, endClientY)
+      }
+      if (state.mouseDownCoords) {
+        const { clientX, clientY } = state.mouseDownCoords
+        drawRectangle(state.selectedColor, clientX, clientY, endClientX, endClientY)
+      }
+      if (altKey) {
+        bringToFront(endClientX, endClientY)
+      }
+
+      state.mouseDownCoords = null
+      state.draggingCoords = null
+      console.log(state.shapes)
+    }
+  )
 
   return (
     <>
-      <label for="columns">
-        Columns:
-        <input
-          type="range"
-          value={state.width}
-          min={1}
-          max={20}
-          onInput$={(ev) => {
-            state.width = (ev.target as HTMLInputElement).valueAsNumber
-          }}
-        />
-      </label>
-      <label for="rows">
-        Rows:
-        <input
-          id="rows"
-          type="range"
-          value={state.height}
-          min={1}
-          max={100}
-          onInput$={(ev) => {
-            state.height = (ev.target as HTMLInputElement).valueAsNumber
-          }}
-        />
-      </label>
-
       <div class="flex justify-between items-stretch">
         <div class="flex gap-1">
           {['red', 'orange', 'yellow', 'green', 'blue', 'purple'].map((color) => (
@@ -106,7 +203,7 @@ export default component$(() => {
         </div>
 
         <div class="flex items-center max-w-fit gap-1">
-          <button onClick$={handleUndo} class="p-[.15rem] border border-slate-700 rounded">
+          <button onClick$={undoState} class="p-[.15rem] border border-slate-700 rounded">
             <svg
               stroke="currentColor"
               fill="currentColor"
@@ -120,7 +217,7 @@ export default component$(() => {
             </svg>
           </button>
 
-          <button onClick$={handleRedo} class="p-[.15rem] border border-slate-700 rounded">
+          <button onClick$={redoState} class="p-[.15rem] border border-slate-700 rounded">
             <svg
               stroke="currentColor"
               fill="currentColor"
@@ -133,24 +230,32 @@ export default component$(() => {
               <path d="M16.82,4,15.4,5.44,17.94,8H8.23a6,6,0,0,0,0,12h2V18h-2a4,4,0,0,1,0-8h9.71L15.4,12.51l1.41,1.41L21.77,9Z"></path>
             </svg>
           </button>
+
+          <button class="py-[.15rem] px-2 text-xs border border-slate-700 rounded" onClick$={clearShapes}>
+            Clear
+          </button>
         </div>
       </div>
 
-      <div class="canvas" style={{ '--columns': state.width, '--rows': state.height }}>
-        {state.grid.map((row, i) =>
-          row.map((col, j) => (
-            <span
-              class="cell"
-              style={{ '--color': col || 'white' }}
-              onMouseDown$={handleMouseDown}
-              onMouseUp$={handleMouseUp}
-              preventdefault:mousedown
-              preventdefault:mouseup
-              data-row={i}
-              data-col={j}
-            />
-          ))
-        )}
+      <div
+        class="h-[1000px] w-full border mt-2 rounded"
+        onMouseDown$={handleMouseDown}
+        onMouseUp$={handleMouseUp}
+        preventdefault:mousedown
+        preventdefault:mouseup
+      >
+        {state.shapes.map((shape) => (
+          <span
+            class="shape absolute"
+            style={{
+              '--left': shape.leftX + 'px',
+              '--top': shape.topY + 'px',
+              '--height': Math.abs(shape.bottomY - shape.topY) + 'px',
+              '--width': Math.abs(shape.rightX - shape.leftX) + 'px',
+              '--background': shape.fillColor,
+            }}
+          />
+        ))}
       </div>
     </>
   )
