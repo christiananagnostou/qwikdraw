@@ -114,18 +114,18 @@ export default component$(() => {
   })
 
   const drawRectangle = $((fillColor: string, leftX: number, topY: number, rightX: number, bottomY: number) => {
+    const rectangle = { fillColor, leftX, topY, rightX, bottomY, erasedPos: {} }
+
     if (leftX > rightX) {
-      const tmp = rightX
-      rightX = leftX
-      leftX = tmp
+      rectangle.rightX = leftX
+      rectangle.leftX = rightX
     }
     if (topY > bottomY) {
-      const tmp = bottomY
-      bottomY = topY
-      topY = tmp
+      rectangle.bottomY = topY
+      rectangle.topY = bottomY
     }
-    state.shapes.push({ fillColor, leftX, topY, rightX, bottomY, erasedPos: {} })
 
+    state.shapes.push(rectangle)
     saveState()
   })
 
@@ -175,6 +175,7 @@ export default component$(() => {
       }
       if (state.mouseDownCoords) {
         const { clientX, clientY } = state.mouseDownCoords
+        console.log(clientX, clientY, endClientX, endClientY)
         drawRectangle(state.selectedColor, clientX, clientY, endClientX, endClientY)
       }
       if (altKey) {
@@ -250,8 +251,8 @@ export default component$(() => {
             style={{
               '--left': shape.leftX + 'px',
               '--top': shape.topY + 'px',
-              '--height': Math.abs(shape.bottomY - shape.topY) + 'px',
-              '--width': Math.abs(shape.rightX - shape.leftX) + 'px',
+              '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
+              '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
               '--background': shape.fillColor,
             }}
           />
