@@ -12,6 +12,11 @@ export const Colors = [
   'rgb(255,0,0)',
 ]
 
+const Palate = {
+  height: 200,
+  width: 200,
+}
+
 interface Props {
   selectedColor: string
   baseColor: string
@@ -22,58 +27,64 @@ interface Props {
 export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, setBaseColor }) => {
   const state = useStore({
     showColorPicker: false,
-    palatePercentX: 50,
-    palatePercentY: 50,
+    palatePercentX: 80,
+    palatePercentY: 20,
     barPercentX: 0,
     mouseDownPalate: false,
     mouseDownBar: false,
   })
 
+  const calcPalateColor = $((percentX: number, percentY: number) => {
+    const baseRGB = baseColor.slice(baseColor.indexOf('(') + 1, -1).split(',')
+    // (255 - (percentX * baseXDiff)) * (lightness percent)
+    const rgb = baseRGB.map((val) => (255 - (percentX / 100) * (255 - parseInt(val))) * (1 - percentY / 100))
+    setSelectedColor(`rgb(${rgb})`)
+
+    state.palatePercentX = percentX
+    state.palatePercentY = percentY
+  })
+
+  const calcBarColor = $((percentX: number) => {
+    percentX = Math.max(Math.min(99.99, percentX), 0) // 0 - 99.99
+    const segmentSize = 100 / 3
+
+    const segmentFactor = Math.round(((percentX % segmentSize) / segmentSize) * 2 * 255)
+    const segment = Math.floor(percentX / segmentSize)
+
+    const rgb = [0, 0, 0]
+    rgb[2 - segment] = Math.min(segmentFactor, 255)
+    rgb[[0, 2, 1][segment]] = 255 - Math.max(0, segmentFactor - 255)
+
+    setBaseColor(`rgb(${rgb})`)
+    state.barPercentX = percentX
+  })
+
+  // Palate mouse move handler
   const handlePalateMouseEvent = $((e: any, skipMouseDown?: boolean) => {
     if (!state.mouseDownPalate && !skipMouseDown) return
 
     const { offsetX, offsetY } = e
-    const { scrollWidth, scrollHeight } = e.target
-    const percentX = offsetX / scrollWidth
-    const percentY = offsetY / scrollHeight
+    const percentX = (offsetX / Palate.width) * 100
+    const percentY = (offsetY / Palate.height) * 100
 
-    const [baseR, baseG, baseB] = baseColor.slice(baseColor.indexOf('(') + 1, -1).split(',')
-
-    // (Max - (percentX * baseXDiff)) * (lightness percent)
-    const r = (255 - percentX * (255 - parseInt(baseR))) * (1 - percentY)
-    const g = (255 - percentX * (255 - parseInt(baseG))) * (1 - percentY)
-    const b = (255 - percentX * (255 - parseInt(baseB))) * (1 - percentY)
-
-    setSelectedColor(`rgb(${[r, g, b]})`)
-
-    state.palatePercentX = percentX * 100
-    state.palatePercentY = percentY * 100
+    calcPalateColor(percentX, percentY)
   })
 
+  // Bar mouse move handler
   const handleColorBarEvent = $((e: any, skipMouseDown?: boolean) => {
     if (!state.mouseDownBar && !skipMouseDown) return
 
     const { offsetX } = e
     const { scrollWidth } = e.target
 
-    const factor = 100 / 3
-    const percentX = Math.max(Math.min(99.99, (offsetX / scrollWidth) * 100), 0)
-
-    const sigmoid = Math.round(((percentX % factor) / factor) * 2 * 255)
-    const segment = Math.floor(percentX / factor)
-
-    const rgb = [0, 0, 0]
-    rgb[2 - segment] = Math.min(sigmoid, 255) // Ascending sigmoid
-    rgb[[0, 2, 1][segment]] = 255 - Math.max(0, sigmoid - 255) // Descing sigmoid
-
-    setBaseColor(`rgb(${rgb})`)
-    state.barPercentX = percentX
+    const percentX = (offsetX / scrollWidth) * 100
+    calcBarColor(percentX)
   })
 
-  // useTask$(({ track }) => {
-  //   const color = track(() => selectedColor)
-  //   console.log(color)
-  // })
+  useTask$(({ track }) => {
+    track(() => baseColor)
+    calcPalateColor(state.palatePercentX, state.palatePercentY)
+  })
 
   useOnDocument(
     'mouseup',
@@ -95,7 +106,8 @@ export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, 
         <div class="relative bg-slate-700 shadow-lg p-[2px] rounded-md">
           {/* Color Palate */}
           <div
-            class="relative w-[200px] h-[200px] rounded overflow-hidden"
+            class="relative rounded overflow-hidden"
+            style={{ height: Palate.height + 'px', width: Palate.width + 'px' }}
             onMouseDown$={() => (state.mouseDownPalate = true)}
             onMouseUp$={() => (state.mouseDownPalate = false)}
             onMouseMove$={(e) => handlePalateMouseEvent(e, false)}
