@@ -327,7 +327,7 @@ export default component$(() => {
       state.zoomPoint.y = e.pageY - e.view.innerHeight / 2
 
       let delta = e.wheelDelta
-      if (delta === undefined) delta = e.originalEvent.detail //we are on firefox
+      if (delta === undefined) delta = e.originalEvent.detail // we are on firefox
       delta = Math.max(-1, Math.min(1, delta)) // cap the delta to [-1,1] for cross browser consistency
 
       // determine the point on where the slide is zoomed in
@@ -336,7 +336,7 @@ export default component$(() => {
 
       // apply zoom
       state.scale += delta * state.zoomFactor * state.scale
-      state.scale = Math.max(-4, Math.min(state.maxScale, state.scale))
+      state.scale = Math.max(0.1, Math.min(state.maxScale, state.scale))
 
       // calculate x and y based on zoom
       state.zoomPos.x = -state.zoomTarget.x * state.scale + state.zoomPoint.x
