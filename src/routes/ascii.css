@@ -57,4 +57,5 @@ label {
   height: var(--height);
   width: var(--width);
   background: var(--background);
+  border-radius: var(--border-radius);
 }
