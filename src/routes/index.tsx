@@ -464,10 +464,10 @@ export default component$(() => {
                 let { clientX: leftX, clientY: topY } = state.canvasMouseDownCoords
                 let { clientX: rightX, clientY: bottomY } = state.canvasMouseMoveCoords
 
-                leftX = (leftX - zoomPos.x / 2) / scale
-                topY = (topY - zoomPos.y / 2) / scale
-                rightX = (rightX - zoomPos.x / 2) / scale
-                bottomY = (bottomY - zoomPos.y / 2) / scale
+                leftX = (leftX - zoomPos.x) / scale
+                topY = (topY - zoomPos.y) / scale
+                rightX = (rightX - zoomPos.x) / scale
+                bottomY = (bottomY - zoomPos.y) / scale
 
                 const newLeftX = leftX > rightX ? rightX : leftX
                 const newTopY = topY > bottomY ? bottomY : topY
