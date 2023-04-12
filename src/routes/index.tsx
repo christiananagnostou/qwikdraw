@@ -15,7 +15,6 @@ interface Shape {
   topY: number
   rightX: number
   bottomY: number
-  erasedPos: { [key: string]: number }
   borderRadius: number
   isSelected: boolean
 }
@@ -32,7 +31,6 @@ export interface State {
   maxScale: number
   zoomFactor: number
   zoomTarget: { x: number; y: number }
-  zoomPoint: { x: number; y: number }
   zoomPos: { x: number; y: number }
 
   shapes: Shape[]
@@ -62,7 +60,6 @@ export default component$(() => {
       maxScale: 4,
       zoomFactor: 0.05,
       zoomTarget: { x: 0, y: 0 },
-      zoomPoint: { x: 0, y: 0 },
       zoomPos: { x: 0, y: 0 },
 
       shapes: [],
@@ -110,18 +107,8 @@ export default component$(() => {
     shape.bottomY += yDiff
   })
 
-  const isErasedPos = $((shape: Shape, x: number, y: number) => {
-    return shape.erasedPos[x - shape.leftX + ',' + (y - shape.topY)]
-  })
-
   const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
-    return (
-      shape.leftX <= x &&
-      shape.topY <= y &&
-      shape.rightX >= x &&
-      shape.bottomY >= y &&
-      !(await isErasedPos(shape, x, y))
-    )
+    return shape.leftX <= x && shape.topY <= y && shape.rightX >= x && shape.bottomY >= y
   })
 
   const getIndexOfShapeAtPos = $(async (x: number, y: number) => {
@@ -148,17 +135,17 @@ export default component$(() => {
     }
   )
 
-  const drawRectangle = $(async (fillColor: string, leftX: number, topY: number, rightX: number, bottomY: number) => {
-    const rectangle = {
-      ...(await correctRectangleDirection({ leftX, topY, rightX, bottomY })),
-      fillColor,
-      erasedPos: {},
-      borderRadius: 0,
-      isSelected: false,
+  const drawRectangle = $(
+    async (props: { fillColor: string; leftX: number; topY: number; rightX: number; bottomY: number }) => {
+      const { fillColor, leftX, topY, rightX, bottomY } = props
+
+      const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
+
+      const rectangle = { ...correctedCoords, fillColor, borderRadius: 0, isSelected: false }
+      state.shapes.push(rectangle)
+      saveState()
     }
-    state.shapes.push(rectangle)
-    saveState()
-  })
+  )
 
   const dragAndDrop = $(async (selectX: number, selectY: number, releaseX: number, releaseY: number) => {
     const xDiff = releaseX - selectX
@@ -191,10 +178,6 @@ export default component$(() => {
     if (shape) shape.isSelected = true
   })
 
-  // const addErasedPosToShape = $((shape: Shape, x: number, y: number) => {
-  //   shape.erasedPos[x - shape.leftX + ',' + (y - shape.topY)] = 1
-  // })
-
   // const getAllShapesAtPos = $((x: number, y: number) => {
   //   return state.shapes.filter((shape) => shapeContainsPos(shape, x, y))
   // })
@@ -203,24 +186,29 @@ export default component$(() => {
   //   for (let y = topY; y <= bottomY; y++) {
   //     for (let x = leftX; x <= rightX; x++) {
   //       const shapes = await getAllShapesAtPos(x, y)
-  //       shapes.forEach((shape) => addErasedPosToShape(shape, x, y))
   //     }
   //   }
   //   saveState()
   // })
 
+  const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+    e.stopPropagation()
+    const { clientX, clientY } = e
+    state.resizeMouseDownCoords = { clientX, clientY }
+  })
+
   const handleCanvasMouseMove = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+    if (state.metaKey && state.canvasMouseDownCoords) {
+      // Pan Canvas
+      state.zoomPos.x += clientX - (state.canvasMouseMoveCoords?.clientX || clientX)
+      state.zoomPos.y += clientY - (state.canvasMouseMoveCoords?.clientY || clientY)
+    }
+
     state.canvasMouseMoveCoords = { clientX, clientY }
   })
 
   const handleCanvasMouseDown = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     state.canvasMouseDownCoords = { clientX, clientY }
-  })
-
-  const handleResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
-    e.stopPropagation()
-    const { clientX, clientY } = e
-    state.resizeMouseDownCoords = { clientX, clientY }
   })
 
   const handleCanvasMouseUp = $(async (e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
@@ -233,13 +221,13 @@ export default component$(() => {
       const mouseMoved = endClientX - clientX !== 0 && endClientY - clientY !== 0
 
       mouseMoved
-        ? await drawRectangle(
-            state.selectedColor,
-            (clientX - zoomPos.x) / scale,
-            (clientY - zoomPos.y) / scale,
-            (endClientX - zoomPos.x) / scale,
-            (endClientY - zoomPos.y) / scale
-          )
+        ? await drawRectangle({
+            fillColor: state.selectedColor,
+            leftX: (clientX - zoomPos.x) / scale,
+            topY: (clientY - zoomPos.y) / scale,
+            rightX: (endClientX - zoomPos.x) / scale,
+            bottomY: (endClientY - zoomPos.y) / scale,
+          })
         : await selectShape((clientX - zoomPos.x) / scale, (clientY - zoomPos.y) / scale)
     }
 
@@ -318,7 +306,13 @@ export default component$(() => {
 
   useOnWindow(
     'keyup',
-    $(() => (state.commandText = ''))
+    $(() => {
+      state.commandText = ''
+      state.keyDown = ''
+      state.metaKey = false
+      state.altKey = false
+      state.shiftKey = false
+    })
   )
 
   useOnWindow(
@@ -327,24 +321,24 @@ export default component$(() => {
       e.preventDefault()
       if (!e.metaKey) return
 
-      state.zoomPoint.x = e.pageX - e.view.innerWidth / 2
-      state.zoomPoint.y = e.pageY - e.view.innerHeight / 2
+      const zoomPointX = e.clientX - window.innerWidth / 2
+      const zoomPointY = e.clientY - window.innerHeight / 2
 
       let delta = e.wheelDelta
       if (delta === undefined) delta = e.originalEvent.detail // we are on firefox
       delta = Math.max(-1, Math.min(1, delta)) // cap the delta to [-1,1] for cross browser consistency
 
       // determine the point on where the slide is zoomed in
-      state.zoomTarget.x = (state.zoomPoint.x - state.zoomPos.x) / state.scale
-      state.zoomTarget.y = (state.zoomPoint.y - state.zoomPos.y) / state.scale
+      state.zoomTarget.x = (zoomPointX - state.zoomPos.x) / state.scale
+      state.zoomTarget.y = (zoomPointY - state.zoomPos.y) / state.scale
 
       // apply zoom
       state.scale += delta * state.zoomFactor * state.scale
       state.scale = Math.max(0.1, Math.min(state.maxScale, state.scale))
 
       // calculate x and y based on zoom
-      state.zoomPos.x = -state.zoomTarget.x * state.scale + state.zoomPoint.x
-      state.zoomPos.y = -state.zoomTarget.y * state.scale + state.zoomPoint.y
+      state.zoomPos.x = -state.zoomTarget.x * state.scale + zoomPointX
+      state.zoomPos.y = -state.zoomTarget.y * state.scale + zoomPointY
     })
   )
 
@@ -376,6 +370,22 @@ export default component$(() => {
 
           <button class="h-8 px-4 text-xs border border-slate-700 rounded" onClick$={() => (state.scale = 1)}>
             {(state.scale * 100).toFixed(0)}%
+          </button>
+          <button
+            class="h-8 px-4 text-xs border border-slate-700 rounded"
+            onClick$={() => {
+              state.zoomTarget = { x: 0, y: 0 }
+            }}
+          >
+            Target {state.zoomTarget.x.toFixed(0)},{state.zoomTarget.y.toFixed(0)}
+          </button>
+          <button
+            class="h-8 px-4 text-xs border border-slate-700 rounded"
+            onClick$={() => {
+              state.zoomPos = { x: 0, y: 0 }
+            }}
+          >
+            Pos {state.zoomPos.x.toFixed(0)},{state.zoomPos.y.toFixed(0)}
           </button>
         </div>
 
@@ -432,7 +442,7 @@ export default component$(() => {
                       {['-top-1 -left-1', '-top-1 -right-1', '-bottom-1 -left-1', '-bottom-1 -right-1'].map((dot) => (
                         <span
                           class={`${dot} absolute h-2 w-2 bg-white rounded-full cursor-pointer`}
-                          onMouseDown$={handleResizeMouseDown}
+                          onMouseDown$={handleShapeResizeMouseDown}
                           preventdefault:mousedown
                         />
                       ))}
@@ -454,10 +464,10 @@ export default component$(() => {
                 let { clientX: leftX, clientY: topY } = state.canvasMouseDownCoords
                 let { clientX: rightX, clientY: bottomY } = state.canvasMouseMoveCoords
 
-                leftX = (leftX - zoomPos.x) / scale
-                topY = (topY - zoomPos.y) / scale
-                rightX = (rightX - zoomPos.x) / scale
-                bottomY = (bottomY - zoomPos.y) / scale
+                leftX = (leftX - zoomPos.x / 2) / scale
+                topY = (topY - zoomPos.y / 2) / scale
+                rightX = (rightX - zoomPos.x / 2) / scale
+                bottomY = (bottomY - zoomPos.y / 2) / scale
 
                 const newLeftX = leftX > rightX ? rightX : leftX
                 const newTopY = topY > bottomY ? bottomY : topY
