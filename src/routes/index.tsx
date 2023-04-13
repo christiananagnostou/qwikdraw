@@ -1,4 +1,4 @@
-import { $, component$ } from '@builder.io/qwik'
+import { $, Resource, component$, useResource$ } from '@builder.io/qwik'
 import { type QwikMouseEvent, useStore, useStylesScoped$ } from '@builder.io/qwik'
 import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
@@ -30,7 +30,6 @@ export interface State {
   scale: number
   maxScale: number
   zoomFactor: number
-  zoomTarget: { x: number; y: number }
   zoomPos: { x: number; y: number }
 
   shapes: Shape[]
@@ -59,7 +58,6 @@ export default component$(() => {
       scale: 1,
       maxScale: 4,
       zoomFactor: 0.05,
-      zoomTarget: { x: 0, y: 0 },
       zoomPos: { x: 0, y: 0 },
 
       shapes: [],
@@ -191,10 +189,28 @@ export default component$(() => {
   //   saveState()
   // })
 
+  const screenToCanvas = $((screenX: number, screenY: number) => {
+    return {
+      canvasX: screenX * state.scale - state.zoomPos.x,
+      canvasY: screenY * state.scale - state.zoomPos.y,
+    }
+  })
+
+  const canvasToScreen = $((canvasX: number, canvasY: number) => {
+    return {
+      screenX: (canvasX - state.zoomPos.x) / state.scale,
+      screenY: (canvasY - state.zoomPos.y) / state.scale,
+    }
+  })
+
   const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     e.stopPropagation()
     const { clientX, clientY } = e
     state.resizeMouseDownCoords = { clientX, clientY }
+  })
+
+  const handleCanvasMouseDown = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+    state.canvasMouseDownCoords = { clientX, clientY }
   })
 
   const handleCanvasMouseMove = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
@@ -207,28 +223,20 @@ export default component$(() => {
     state.canvasMouseMoveCoords = { clientX, clientY }
   })
 
-  const handleCanvasMouseDown = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
-    state.canvasMouseDownCoords = { clientX, clientY }
-  })
-
   const handleCanvasMouseUp = $(async (e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     const { clientX: endClientX, clientY: endClientY } = e
 
     // Draw Shape
-    if (state.commandText === '' && state.canvasMouseDownCoords) {
+    if (!state.keyDown && state.canvasMouseDownCoords) {
       const { clientX, clientY } = state.canvasMouseDownCoords
-      const { scale, zoomPos } = state
       const mouseMoved = endClientX - clientX !== 0 && endClientY - clientY !== 0
 
+      const { canvasX: leftX, canvasY: topY } = await screenToCanvas(clientX, clientY)
+      const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(endClientX, endClientY)
+
       mouseMoved
-        ? await drawRectangle({
-            fillColor: state.selectedColor,
-            leftX: (clientX - zoomPos.x) / scale,
-            topY: (clientY - zoomPos.y) / scale,
-            rightX: (endClientX - zoomPos.x) / scale,
-            bottomY: (endClientY - zoomPos.y) / scale,
-          })
-        : await selectShape((clientX - zoomPos.x) / scale, (clientY - zoomPos.y) / scale)
+        ? await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
+        : await selectShape(leftX, topY)
     }
 
     // Move Shape
@@ -258,6 +266,31 @@ export default component$(() => {
     state.resizeMouseDownCoords = null
   })
 
+  const previewStyle = useResource$<any>(async ({ track }) => {
+    const canvasMouseDownCoords = track(() => state.canvasMouseDownCoords)
+    const canvasMouseMoveCoords = track(() => state.canvasMouseMoveCoords)
+
+    if (!canvasMouseDownCoords || !canvasMouseMoveCoords || state.keyDown) return
+
+    const { canvasX: leftX, canvasY: topY } = await screenToCanvas(
+      canvasMouseDownCoords.clientX,
+      canvasMouseDownCoords.clientY
+    )
+    const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(
+      canvasMouseMoveCoords.clientX,
+      canvasMouseMoveCoords.clientY
+    )
+    const coords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
+
+    return {
+      '--left': coords.leftX + 'px',
+      '--top': coords.topY + 'px',
+      '--height': Math.abs(coords.bottomY - coords.topY) + 'px',
+      '--width': Math.abs(coords.rightX - coords.leftX) + 'px',
+      '--background': state.selectedColor,
+    }
+  })
+
   useOnWindow(
     'keydown',
     $((e: Event) => {
@@ -285,8 +318,11 @@ export default component$(() => {
         case 'Shift':
           state.commandText = 'Move'
           break
-        case 'Meta':
+        case 'f':
           state.commandText = 'Bring to Front'
+          break
+        case 'Meta':
+          state.commandText = 'Zoom / Pan'
           break
         case 'z':
           if (shiftKey && metaKey) {
@@ -317,7 +353,7 @@ export default component$(() => {
 
   useOnWindow(
     'wheel',
-    $((e: any) => {
+    $(async (e: any) => {
       e.preventDefault()
       if (!e.metaKey) return
 
@@ -329,16 +365,15 @@ export default component$(() => {
       delta = Math.max(-1, Math.min(1, delta)) // cap the delta to [-1,1] for cross browser consistency
 
       // determine the point on where the slide is zoomed in
-      state.zoomTarget.x = (zoomPointX - state.zoomPos.x) / state.scale
-      state.zoomTarget.y = (zoomPointY - state.zoomPos.y) / state.scale
+      const { screenX, screenY } = await canvasToScreen(zoomPointX, zoomPointY)
 
       // apply zoom
-      state.scale += delta * state.zoomFactor * state.scale
-      state.scale = Math.max(0.1, Math.min(state.maxScale, state.scale))
+      const newScale = state.scale + delta * state.zoomFactor * state.scale
+      state.scale = Math.max(0.1, Math.min(state.maxScale, newScale))
 
       // calculate x and y based on zoom
-      state.zoomPos.x = -state.zoomTarget.x * state.scale + zoomPointX
-      state.zoomPos.y = -state.zoomTarget.y * state.scale + zoomPointY
+      state.zoomPos.x = -screenX * state.scale + zoomPointX
+      state.zoomPos.y = -screenY * state.scale + zoomPointY
     })
   )
 
@@ -371,14 +406,7 @@ export default component$(() => {
           <button class="h-8 px-4 text-xs border border-slate-700 rounded" onClick$={() => (state.scale = 1)}>
             {(state.scale * 100).toFixed(0)}%
           </button>
-          <button
-            class="h-8 px-4 text-xs border border-slate-700 rounded"
-            onClick$={() => {
-              state.zoomTarget = { x: 0, y: 0 }
-            }}
-          >
-            Target {state.zoomTarget.x.toFixed(0)},{state.zoomTarget.y.toFixed(0)}
-          </button>
+
           <button
             class="h-8 px-4 text-xs border border-slate-700 rounded"
             onClick$={() => {
@@ -415,75 +443,40 @@ export default component$(() => {
           }}
         >
           {/* Drawn Shapes */}
-          {state.shapes.map((shape) => {
-            const styles = {
-              '--left': shape.leftX + 'px',
-              '--top': shape.topY + 'px',
-              '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
-              '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
-              '--border-radius': shape.borderRadius + 'px',
-            }
-
-            return (
-              <>
-                <span
-                  class="shape absolute"
-                  style={{
-                    ...styles,
-                    '--background': shape.fillColor,
-                  }}
-                >
-                  {shape.isSelected && (
-                    <div
-                      class="h-full w-full relative"
-                      style={{ border: shape.isSelected ? '1px solid white' : 'none' }}
-                    >
-                      {/* Resize Dots */}
-                      {['-top-1 -left-1', '-top-1 -right-1', '-bottom-1 -left-1', '-bottom-1 -right-1'].map((dot) => (
-                        <span
-                          class={`${dot} absolute h-2 w-2 bg-white rounded-full cursor-pointer`}
-                          onMouseDown$={handleShapeResizeMouseDown}
-                          preventdefault:mousedown
-                        />
-                      ))}
-                    </div>
-                  )}
-                </span>
-              </>
-            )
-          })}
+          {state.shapes.map((shape) => (
+            <>
+              <span
+                class="shape absolute"
+                style={{
+                  '--left': shape.leftX + 'px',
+                  '--top': shape.topY + 'px',
+                  '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
+                  '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
+                  '--border-radius': shape.borderRadius + 'px',
+                  '--background': shape.fillColor,
+                }}
+              >
+                {shape.isSelected && (
+                  <div class="h-full w-full relative" style={{ border: shape.isSelected ? '1px solid white' : 'none' }}>
+                    {/* Resize Dots */}
+                    {['-top-1 -left-1', '-top-1 -right-1', '-bottom-1 -left-1', '-bottom-1 -right-1'].map((dot) => (
+                      <span
+                        class={`${dot} absolute h-2 w-2 bg-white rounded-full cursor-pointer`}
+                        onMouseDown$={handleShapeResizeMouseDown}
+                        preventdefault:mousedown
+                      />
+                    ))}
+                  </div>
+                )}
+              </span>
+            </>
+          ))}
 
           {/* Shape Preview */}
-          {state.commandText === '' && state.canvasMouseDownCoords && state.canvasMouseMoveCoords && (
-            <span
-              class="shape absolute"
-              style={(() => {
-                if (!state.canvasMouseDownCoords || !state.canvasMouseMoveCoords) return
-
-                const { scale, zoomPos } = state
-                let { clientX: leftX, clientY: topY } = state.canvasMouseDownCoords
-                let { clientX: rightX, clientY: bottomY } = state.canvasMouseMoveCoords
-
-                leftX = (leftX - zoomPos.x) / scale
-                topY = (topY - zoomPos.y) / scale
-                rightX = (rightX - zoomPos.x) / scale
-                bottomY = (bottomY - zoomPos.y) / scale
-
-                const newLeftX = leftX > rightX ? rightX : leftX
-                const newTopY = topY > bottomY ? bottomY : topY
-                const newRightX = leftX > rightX ? leftX : rightX
-                const newBottomY = topY > bottomY ? topY : bottomY
-
-                return {
-                  '--left': newLeftX + 'px',
-                  '--top': newTopY + 'px',
-                  '--height': Math.abs(newBottomY - newTopY) + 'px',
-                  '--width': Math.abs(newRightX - newLeftX) + 'px',
-                  '--background': state.selectedColor,
-                }
-              })()}
-            />
-          )}
+          <Resource
+            value={previewStyle}
+            onResolved={(styles: CSSModuleClasses | undefined) => <span class="shape absolute" style={styles} />}
+          />
         </div>
       </div>
     </>
