@@ -111,18 +111,18 @@ export default component$(() => {
     shape.bottomY += yDiff
   })
 
-  const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
-    return shape.leftX <= x && shape.topY <= y && shape.rightX >= x && shape.bottomY >= y
-  })
+  // const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
+  //   return shape.leftX <= x && shape.topY <= y && shape.rightX >= x && shape.bottomY >= y
+  // })
 
-  const getIndexOfShapeAtPos = $(async (x: number, y: number) => {
-    let i = state.shapes.length
-    while (i--) {
-      const shape = state.shapes[i]
-      if (await shapeContainsPos(shape, x, y)) return i
-    }
-    return -1
-  })
+  // const getIndexOfShapeAtPos = $(async (x: number, y: number) => {
+  //   let i = state.shapes.length
+  //   while (i--) {
+  //     const shape = state.shapes[i]
+  //     if (await shapeContainsPos(shape, x, y)) return i
+  //   }
+  //   return -1
+  // })
 
   const correctRectangleDirection = $(
     ({ leftX, topY, rightX, bottomY }: { leftX: number; topY: number; rightX: number; bottomY: number }) => {
@@ -147,18 +147,12 @@ export default component$(() => {
     }
   )
 
-  const dragAndDrop = $(async (shape: Shape, selectX: number, selectY: number, releaseX: number, releaseY: number) => {
-    const xDiff = releaseX - selectX
-    const yDiff = releaseY - selectY
-    moveShape(shape, xDiff, yDiff)
-  })
-
   const deleteShape = $((shape: Shape) => {
     state.shapes = state.shapes.filter((s) => s.id !== shape.id)
   })
 
-  const bringToFront = $(async (selectX: number, selectY: number) => {
-    const shapeIndex = await getIndexOfShapeAtPos(selectX, selectY)
+  const bringToFront = $((shape: Shape) => {
+    const shapeIndex = state.shapes.findIndex((s) => s.id === shape.id)
     if (shapeIndex > -1) {
       const [removedShape] = state.shapes.splice(shapeIndex, 1)
       state.shapes.push(removedShape)
@@ -197,6 +191,7 @@ export default component$(() => {
 
   const handleShapeClick = $((shape: Shape) => {
     if (state.keyDown === 'Backspace') deleteShape(shape)
+    else if (state.keyDown === 'f') bringToFront(shape)
     else state.selectedShape = shape
   })
 
@@ -217,7 +212,9 @@ export default component$(() => {
       const { clientX: startX, clientY: startY } = state.shapeMouseDownCoords
       const { screenX: startClientX, screenY: startClientY } = await canvasToScreen(startX, startY)
       const { screenX: endClientX, screenY: endClientY } = await canvasToScreen(clientX, clientY)
-      dragAndDrop(state.selectedShape, startClientX, startClientY, endClientX, endClientY)
+      const xDiff = endClientX - startClientX
+      const yDiff = endClientY - startClientY
+      moveShape(state.selectedShape, xDiff, yDiff)
       state.shapeMouseDownCoords = { clientX, clientY }
     }
 
@@ -235,12 +232,9 @@ export default component$(() => {
       const { canvasX: leftX, canvasY: topY } = await screenToCanvas(clientX, clientY)
       const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(endClientX, endClientY)
 
-      if (mouseMoved) await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
-    }
-
-    // Bring Shape to Front
-    if (state.commandText === 'Bring to Front') {
-      bringToFront(endClientX, endClientY)
+      mouseMoved
+        ? await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
+        : (state.selectedShape = undefined)
     }
 
     // Resize Shape
@@ -252,6 +246,8 @@ export default component$(() => {
     state.canvasMouseDownCoords = null
     state.shapeMouseDownCoords = null
     state.resizeMouseDownCoords = null
+
+    saveState()
   })
 
   const previewStyle = useResource$<any>(async ({ track }) => {

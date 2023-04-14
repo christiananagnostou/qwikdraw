@@ -8,8 +8,8 @@ export default component$(() => {
           <Slot />
         </section>
       </main>
-      <footer class="absolute bottom-4 right-4 text-slate-500">
-        Made with ♡ by{' '}
+      <footer class="absolute bottom-4 right-4 text-sm text-slate-500 group">
+        Made with <span class="group-hover:text-red-500">♡</span> by{' '}
         <a href="https://www.christiancodes.co/" target="_blank">
           Christian
         </a>
