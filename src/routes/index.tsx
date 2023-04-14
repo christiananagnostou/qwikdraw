@@ -16,13 +16,20 @@ interface Shape {
   rightX: number
   bottomY: number
   borderRadius: number
-  isSelected: boolean
+  id: string
 }
 
 export interface State {
-  canvasMouseDownCoords: { clientX: number; clientY: number } | null
   canvasMouseMoveCoords: { clientX: number; clientY: number } | null
+
+  canvasMouseDownCoords: { clientX: number; clientY: number } | null
+  shapeMouseDownCoords: { clientX: number; clientY: number } | null
   resizeMouseDownCoords: { clientX: number; clientY: number } | null
+
+  shapes: Shape[]
+  selectedShape?: Shape
+  history: { [key: number]: { shapes: Shape[] } }
+  savesCount: number
 
   selectedColor: string
   baseColor: string
@@ -31,10 +38,6 @@ export interface State {
   maxScale: number
   zoomFactor: number
   zoomPos: { x: number; y: number }
-
-  shapes: Shape[]
-  history: { [key: number]: { shapes: Shape[] } }
-  savesCount: number
 
   commandText: string
   keyDown: string
@@ -48,9 +51,16 @@ export default component$(() => {
 
   const state = useStore<State>(
     {
-      canvasMouseDownCoords: null,
       canvasMouseMoveCoords: null,
+
+      canvasMouseDownCoords: null,
+      shapeMouseDownCoords: null,
       resizeMouseDownCoords: null,
+
+      shapes: [],
+      selectedShape: undefined,
+      history: { 0: { shapes: [] } },
+      savesCount: 0,
 
       selectedColor: 'rgb(255,0,0)',
       baseColor: 'rgb(255,0,0)',
@@ -59,10 +69,6 @@ export default component$(() => {
       maxScale: 4,
       zoomFactor: 0.05,
       zoomPos: { x: 0, y: 0 },
-
-      shapes: [],
-      history: { 0: { shapes: [] } },
-      savesCount: 0,
 
       commandText: '',
       keyDown: '',
@@ -118,10 +124,6 @@ export default component$(() => {
     return -1
   })
 
-  const getShapeAtPos = $(async (x: number, y: number) => {
-    return state.shapes[await getIndexOfShapeAtPos(x, y)]
-  })
-
   const correctRectangleDirection = $(
     ({ leftX, topY, rightX, bottomY }: { leftX: number; topY: number; rightX: number; bottomY: number }) => {
       return {
@@ -139,25 +141,20 @@ export default component$(() => {
 
       const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
 
-      const rectangle = { ...correctedCoords, fillColor, borderRadius: 0, isSelected: false }
+      const rectangle = { ...correctedCoords, fillColor, borderRadius: 0, id: 'id' + new Date().getTime() }
       state.shapes.push(rectangle)
       saveState()
     }
   )
 
-  const dragAndDrop = $(async (selectX: number, selectY: number, releaseX: number, releaseY: number) => {
+  const dragAndDrop = $(async (shape: Shape, selectX: number, selectY: number, releaseX: number, releaseY: number) => {
     const xDiff = releaseX - selectX
     const yDiff = releaseY - selectY
-
-    const shape = state.shapes[await getIndexOfShapeAtPos(selectX, selectY)]
-    if (!shape) return
     moveShape(shape, xDiff, yDiff)
-
-    saveState()
   })
 
-  const deleteShape = $(async (selectX: number, selectY: number) => {
-    state.shapes.splice(await getIndexOfShapeAtPos(selectX, selectY), 1)
+  const deleteShape = $((shape: Shape) => {
+    state.shapes = state.shapes.filter((s) => s.id !== shape.id)
   })
 
   const bringToFront = $(async (selectX: number, selectY: number) => {
@@ -170,29 +167,10 @@ export default component$(() => {
     saveState()
   })
 
-  const selectShape = $(async (clientX: number, clientY: number) => {
-    state.shapes.forEach((shape) => (shape.isSelected = false))
-    const shape = await getShapeAtPos(clientX, clientY)
-    if (shape) shape.isSelected = true
-  })
-
-  // const getAllShapesAtPos = $((x: number, y: number) => {
-  //   return state.shapes.filter((shape) => shapeContainsPos(shape, x, y))
-  // })
-
-  // const eraseArea = $(async (leftX: number, topY: number, rightX: number, bottomY: number) => {
-  //   for (let y = topY; y <= bottomY; y++) {
-  //     for (let x = leftX; x <= rightX; x++) {
-  //       const shapes = await getAllShapesAtPos(x, y)
-  //     }
-  //   }
-  //   saveState()
-  // })
-
   const screenToCanvas = $((screenX: number, screenY: number) => {
     return {
-      canvasX: screenX * state.scale - state.zoomPos.x,
-      canvasY: screenY * state.scale - state.zoomPos.y,
+      canvasX: (screenX - state.zoomPos.x - (window.innerWidth / 2) * (1 - state.scale)) / state.scale,
+      canvasY: (screenY - state.zoomPos.y - (window.innerHeight / 2) * (1 - state.scale)) / state.scale,
     }
   })
 
@@ -203,21 +181,44 @@ export default component$(() => {
     }
   })
 
+  // Resize Mouse Handler
   const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     e.stopPropagation()
-    const { clientX, clientY } = e
-    state.resizeMouseDownCoords = { clientX, clientY }
+    state.resizeMouseDownCoords = { clientX: e.clientX, clientY: e.clientY }
   })
 
+  // Shape Mouse Handler
+  const handleShapeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>, shape: Shape) => {
+    if (state.keyDown === 'Shift') {
+      state.shapeMouseDownCoords = { clientX: e.clientX, clientY: e.clientY }
+      state.selectedShape = shape
+    }
+  })
+
+  const handleShapeClick = $((shape: Shape) => {
+    if (state.keyDown === 'Backspace') deleteShape(shape)
+    else state.selectedShape = shape
+  })
+
+  // Canvas Mouse Handlers
   const handleCanvasMouseDown = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     state.canvasMouseDownCoords = { clientX, clientY }
   })
 
-  const handleCanvasMouseMove = $(({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+  const handleCanvasMouseMove = $(async ({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     if (state.metaKey && state.canvasMouseDownCoords) {
       // Pan Canvas
       state.zoomPos.x += clientX - (state.canvasMouseMoveCoords?.clientX || clientX)
       state.zoomPos.y += clientY - (state.canvasMouseMoveCoords?.clientY || clientY)
+    }
+
+    // Move Shape
+    if (state.keyDown === 'Shift' && state.shapeMouseDownCoords && state.selectedShape) {
+      const { clientX: startX, clientY: startY } = state.shapeMouseDownCoords
+      const { screenX: startClientX, screenY: startClientY } = await canvasToScreen(startX, startY)
+      const { screenX: endClientX, screenY: endClientY } = await canvasToScreen(clientX, clientY)
+      dragAndDrop(state.selectedShape, startClientX, startClientY, endClientX, endClientY)
+      state.shapeMouseDownCoords = { clientX, clientY }
     }
 
     state.canvasMouseMoveCoords = { clientX, clientY }
@@ -234,21 +235,7 @@ export default component$(() => {
       const { canvasX: leftX, canvasY: topY } = await screenToCanvas(clientX, clientY)
       const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(endClientX, endClientY)
 
-      mouseMoved
-        ? await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
-        : await selectShape(leftX, topY)
-    }
-
-    // Move Shape
-    if (state.commandText === 'Move' && state.canvasMouseDownCoords) {
-      const { clientX, clientY } = state.canvasMouseDownCoords
-      dragAndDrop(clientX, clientY, endClientX, endClientY)
-    }
-
-    // Delete Shape on Click
-    if (state.commandText === 'Delete' && state.canvasMouseDownCoords) {
-      const { clientX, clientY } = state.canvasMouseDownCoords
-      deleteShape(clientX, clientY)
+      if (mouseMoved) await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
     }
 
     // Bring Shape to Front
@@ -261,8 +248,9 @@ export default component$(() => {
       console.log({ start: state.resizeMouseDownCoords, endClientX, endClientY })
     }
 
-    state.canvasMouseDownCoords = null
     state.canvasMouseMoveCoords = null
+    state.canvasMouseDownCoords = null
+    state.shapeMouseDownCoords = null
     state.resizeMouseDownCoords = null
   })
 
@@ -311,7 +299,7 @@ export default component$(() => {
 
       switch (key) {
         case 'Backspace':
-          state.shapes = state.shapes.filter((shape) => !shape.isSelected)
+          state.shapes = state.shapes.filter((shape) => state.selectedShape?.id !== shape.id)
           saveState()
           state.commandText = 'Delete'
           break
@@ -443,34 +431,56 @@ export default component$(() => {
           }}
         >
           {/* Drawn Shapes */}
-          {state.shapes.map((shape) => (
-            <>
-              <span
-                class="shape absolute"
-                style={{
-                  '--left': shape.leftX + 'px',
-                  '--top': shape.topY + 'px',
-                  '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
-                  '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
-                  '--border-radius': shape.borderRadius + 'px',
-                  '--background': shape.fillColor,
-                }}
-              >
-                {shape.isSelected && (
-                  <div class="h-full w-full relative" style={{ border: shape.isSelected ? '1px solid white' : 'none' }}>
-                    {/* Resize Dots */}
-                    {['-top-1 -left-1', '-top-1 -right-1', '-bottom-1 -left-1', '-bottom-1 -right-1'].map((dot) => (
-                      <span
-                        class={`${dot} absolute h-2 w-2 bg-white rounded-full cursor-pointer`}
-                        onMouseDown$={handleShapeResizeMouseDown}
-                        preventdefault:mousedown
-                      />
-                    ))}
-                  </div>
-                )}
-              </span>
-            </>
-          ))}
+          {state.shapes.map((shape) => {
+            const dotSize = 8
+            const dotPos = -(dotSize / 2 / state.scale + 2 / state.scale) + 'px'
+            const isSelected = state.selectedShape?.id === shape.id
+
+            return (
+              <>
+                <span
+                  onClick$={() => handleShapeClick(shape)}
+                  onMouseDown$={(e) => handleShapeMouseDown(e, shape)}
+                  preventdefault:mousedown
+                  class="shape absolute"
+                  style={{
+                    '--left': shape.leftX + 'px',
+                    '--top': shape.topY + 'px',
+                    '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
+                    '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
+                    '--border-radius': shape.borderRadius + 'px',
+                    '--background': shape.fillColor,
+                  }}
+                >
+                  {isSelected && (
+                    <div
+                      class="h-full w-full relative"
+                      style={{ border: isSelected ? 2 / state.scale + 'px solid white' : 'none' }}
+                    >
+                      {/* Resize Dots */}
+                      {[
+                        { top: dotPos, left: dotPos },
+                        { top: dotPos, right: dotPos },
+                        { bottom: dotPos, left: dotPos },
+                        { bottom: dotPos, right: dotPos },
+                      ].map((dotLocation) => (
+                        <span
+                          onMouseDown$={handleShapeResizeMouseDown}
+                          preventdefault:mousedown
+                          class="absolute bg-white rounded-full cursor-pointer"
+                          style={{
+                            height: dotSize / state.scale + 'px',
+                            width: dotSize / state.scale + 'px',
+                            ...dotLocation,
+                          }}
+                        />
+                      ))}
+                    </div>
+                  )}
+                </span>
+              </>
+            )
+          })}
 
           {/* Shape Preview */}
           <Resource
