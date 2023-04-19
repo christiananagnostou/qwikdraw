@@ -1,13 +1,69 @@
-import { $, Resource, component$, useResource$ } from '@builder.io/qwik'
-import { type QwikMouseEvent, useStore, useStylesScoped$ } from '@builder.io/qwik'
+import { $, Resource, component$, useResource$, useOnWindow, useStore, useStylesScoped$ } from '@builder.io/qwik'
+import type { QwikChangeEvent, QwikMouseEvent } from '@builder.io/qwik'
 import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
 
+import styles from './ascii.css?inline'
+import Colors from '~/components/colors'
+
 import { Redo } from '~/components/icons/redo'
 import { Undo } from '~/components/icons/undo'
-import Colors from '~/components/colors'
-import styles from './ascii.css?inline'
-import { useOnWindow } from '@builder.io/qwik'
+import { Keyboard } from '~/components/icons/keyboard'
+import { Shift } from '~/components/icons/shift'
+import { Command } from '~/components/icons/command'
+import { Backspace } from '~/components/icons/backspace'
+import { Rectangle } from '~/components/icons/retangle'
+import { Circle } from '~/components/icons/circle'
+import { ImageFile } from '~/components/icons/imageFile'
+import { Triangle } from '~/components/icons/triangle'
+
+const KeyboardCommands = [
+  {
+    key: '⇧ Click',
+    command: 'Move',
+  },
+  {
+    key: 'F Click',
+    command: 'Bring to Front',
+  },
+  {
+    key: '⌘ Scroll',
+    command: 'Zoom',
+  },
+  {
+    key: '⌘ Drag',
+    command: 'Pan',
+  },
+  {
+    key: '⌘ Z',
+    command: 'Undo',
+  },
+  {
+    key: '⇧ ⌘ Z',
+    command: 'Redo',
+  },
+  {
+    key: '⌫',
+    command: 'Delete',
+  },
+
+  {
+    key: 'c',
+    command: 'Circle',
+  },
+  {
+    key: 'r',
+    command: 'Rectangle',
+  },
+  {
+    key: 't',
+    command: 'Triangle',
+  },
+  {
+    key: 'i',
+    command: 'Image',
+  },
+]
 
 interface Shape {
   fillColor: string
@@ -15,7 +71,9 @@ interface Shape {
   topY: number
   rightX: number
   bottomY: number
-  borderRadius: number
+  borderRadius: string
+  type: 'image' | 'rectangle' | 'circle' | 'triangle'
+  src?: string
   id: string
 }
 
@@ -24,12 +82,13 @@ export interface State {
 
   canvasMouseDownCoords: { clientX: number; clientY: number } | null
   shapeMouseDownCoords: { clientX: number; clientY: number } | null
-  resizeMouseDownCoords: { clientX: number; clientY: number } | null
+  resizeMouseDownCoords: { clientX: number; clientY: number; corner: number } | null
 
   shapes: Shape[]
   selectedShape?: Shape
   history: { [key: number]: { shapes: Shape[] } }
   savesCount: number
+  currShapeType: Shape['type']
 
   selectedColor: string
   baseColor: string
@@ -44,6 +103,7 @@ export interface State {
   metaKey: boolean
   shiftKey: boolean
   altKey: boolean
+  showKeyShortcuts: boolean
 }
 
 export default component$(() => {
@@ -61,6 +121,7 @@ export default component$(() => {
       selectedShape: undefined,
       history: { 0: { shapes: [] } },
       savesCount: 0,
+      currShapeType: 'rectangle',
 
       selectedColor: 'rgb(255,0,0)',
       baseColor: 'rgb(255,0,0)',
@@ -75,6 +136,7 @@ export default component$(() => {
       metaKey: false,
       shiftKey: false,
       altKey: false,
+      showKeyShortcuts: false,
     },
     { deep: true }
   )
@@ -104,11 +166,59 @@ export default component$(() => {
     saveState()
   })
 
+  const correctRectangleDirection = $(
+    ({ leftX, topY, rightX, bottomY }: { leftX: number; topY: number; rightX: number; bottomY: number }) => {
+      return {
+        leftX: leftX > rightX ? rightX : leftX,
+        topY: topY > bottomY ? bottomY : topY,
+        rightX: leftX > rightX ? leftX : rightX,
+        bottomY: topY > bottomY ? topY : bottomY,
+      }
+    }
+  )
+
   const moveShape = $((shape: Shape, xDiff: number, yDiff: number) => {
     shape.leftX += xDiff
     shape.topY += yDiff
     shape.rightX += xDiff
     shape.bottomY += yDiff
+  })
+
+  const moveShapeCorner = $(async (xDiff: number, yDiff: number, shape: Shape, corner: number) => {
+    let { leftX, topY, rightX, bottomY } = shape
+
+    // Top Left
+    if (corner === 0) {
+      if (bottomY <= topY + yDiff) {
+        leftX += xDiff
+        bottomY += yDiff
+      } else {
+        leftX += xDiff
+        topY += yDiff
+      }
+    }
+    // Top Right
+    else if (corner === 1) {
+      rightX += xDiff
+      topY += yDiff
+    }
+    // Bottom Left
+    else if (corner === 2) {
+      leftX += xDiff
+      bottomY += yDiff
+    }
+    // Bottom Right
+    else if (corner === 3) {
+      rightX += xDiff
+      bottomY += yDiff
+    }
+
+    const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
+    console.log({ ...correctedCoords })
+    shape.leftX = correctedCoords.leftX
+    shape.topY = correctedCoords.topY
+    shape.rightX = correctedCoords.rightX
+    shape.bottomY = correctedCoords.bottomY
   })
 
   // const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
@@ -124,25 +234,28 @@ export default component$(() => {
   //   return -1
   // })
 
-  const correctRectangleDirection = $(
-    ({ leftX, topY, rightX, bottomY }: { leftX: number; topY: number; rightX: number; bottomY: number }) => {
-      return {
-        leftX: leftX > rightX ? rightX : leftX,
-        topY: topY > bottomY ? bottomY : topY,
-        rightX: leftX > rightX ? leftX : rightX,
-        bottomY: topY > bottomY ? topY : bottomY,
-      }
-    }
-  )
-
-  const drawRectangle = $(
-    async (props: { fillColor: string; leftX: number; topY: number; rightX: number; bottomY: number }) => {
-      const { fillColor, leftX, topY, rightX, bottomY } = props
-
+  const drawShape = $(
+    async (props: {
+      fillColor: string
+      leftX: number
+      topY: number
+      rightX: number
+      bottomY: number
+      src?: string
+      type?: Shape['type']
+    }) => {
+      const { fillColor, leftX, topY, rightX, bottomY, src, type } = props
       const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
 
-      const rectangle = { ...correctedCoords, fillColor, borderRadius: 0, id: 'id' + new Date().getTime() }
-      state.shapes.push(rectangle)
+      const shape: Shape = {
+        ...correctedCoords,
+        fillColor,
+        borderRadius: state.currShapeType === 'circle' ? '50%' : '0px',
+        id: 'id' + new Date().getTime(),
+        type: type || state.currShapeType,
+      }
+      if (src && shape.type === 'image') shape.src = src
+      state.shapes.push(shape)
       saveState()
     }
   )
@@ -157,14 +270,13 @@ export default component$(() => {
       const [removedShape] = state.shapes.splice(shapeIndex, 1)
       state.shapes.push(removedShape)
     }
-
     saveState()
   })
 
   const screenToCanvas = $((screenX: number, screenY: number) => {
     return {
-      canvasX: (screenX - state.zoomPos.x - (window.innerWidth / 2) * (1 - state.scale)) / state.scale,
-      canvasY: (screenY - state.zoomPos.y - (window.innerHeight / 2) * (1 - state.scale)) / state.scale,
+      canvasX: (screenX - state.zoomPos.x - (innerWidth / 2) * (1 - state.scale)) / state.scale,
+      canvasY: (screenY - state.zoomPos.y - (innerHeight / 2) * (1 - state.scale)) / state.scale,
     }
   })
 
@@ -176,9 +288,9 @@ export default component$(() => {
   })
 
   // Resize Mouse Handler
-  const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+  const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>, corner: number) => {
     e.stopPropagation()
-    state.resizeMouseDownCoords = { clientX: e.clientX, clientY: e.clientY }
+    state.resizeMouseDownCoords = { clientX: e.clientX, clientY: e.clientY, corner }
   })
 
   // Shape Mouse Handler
@@ -190,9 +302,9 @@ export default component$(() => {
   })
 
   const handleShapeClick = $((shape: Shape) => {
-    if (state.keyDown === 'Backspace') deleteShape(shape)
-    else if (state.keyDown === 'f') bringToFront(shape)
-    else state.selectedShape = shape
+    if (state.commandText === 'Delete') deleteShape(shape)
+    else if (state.commandText === 'Bring to Front') bringToFront(shape)
+    else if (!state.canvasMouseDownCoords) state.selectedShape = shape
   })
 
   // Canvas Mouse Handlers
@@ -207,15 +319,27 @@ export default component$(() => {
       state.zoomPos.y += clientY - (state.canvasMouseMoveCoords?.clientY || clientY)
     }
 
+    const getScreenCoordDiff = async (startX: number, startY: number) => {
+      const { screenX: startClientX, screenY: startClientY } = await canvasToScreen(startX, startY)
+      const { screenX: endClientX, screenY: endClientY } = await canvasToScreen(clientX, clientY)
+      return { xDiff: endClientX - startClientX, yDiff: endClientY - startClientY }
+    }
+
     // Move Shape
     if (state.keyDown === 'Shift' && state.shapeMouseDownCoords && state.selectedShape) {
       const { clientX: startX, clientY: startY } = state.shapeMouseDownCoords
-      const { screenX: startClientX, screenY: startClientY } = await canvasToScreen(startX, startY)
-      const { screenX: endClientX, screenY: endClientY } = await canvasToScreen(clientX, clientY)
-      const xDiff = endClientX - startClientX
-      const yDiff = endClientY - startClientY
+      const { xDiff, yDiff } = await getScreenCoordDiff(startX, startY)
       moveShape(state.selectedShape, xDiff, yDiff)
       state.shapeMouseDownCoords = { clientX, clientY }
+    }
+
+    // Resize Shape
+    if (state.resizeMouseDownCoords) {
+      if (!state.selectedShape) return
+      const { clientX: startX, clientY: startY, corner } = state.resizeMouseDownCoords
+      const { xDiff, yDiff } = await getScreenCoordDiff(startX, startY)
+      moveShapeCorner(xDiff, yDiff, state.selectedShape, corner)
+      state.resizeMouseDownCoords = { clientX, clientY, corner }
     }
 
     state.canvasMouseMoveCoords = { clientX, clientY }
@@ -233,13 +357,8 @@ export default component$(() => {
       const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(endClientX, endClientY)
 
       mouseMoved
-        ? await drawRectangle({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
+        ? await drawShape({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
         : (state.selectedShape = undefined)
-    }
-
-    // Resize Shape
-    if (state.commandText === '' && state.resizeMouseDownCoords) {
-      console.log({ start: state.resizeMouseDownCoords, endClientX, endClientY })
     }
 
     state.canvasMouseMoveCoords = null
@@ -272,7 +391,45 @@ export default component$(() => {
       '--height': Math.abs(coords.bottomY - coords.topY) + 'px',
       '--width': Math.abs(coords.rightX - coords.leftX) + 'px',
       '--background': state.selectedColor,
+      '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
     }
+  })
+
+  const handleFileInput = $((e: QwikChangeEvent<HTMLInputElement>) => {
+    if (!e.target.files) return
+
+    const file = e.target.files[0]
+    const reader = new FileReader()
+
+    const handleErr = () => {
+      state.commandText = 'Error loading file'
+      setTimeout(() => (state.commandText = ''), 2000)
+    }
+
+    reader.onloadend = () => {
+      if (!reader?.result) return handleErr()
+
+      const src = reader.result.toString()
+      const img = new Image()
+
+      img.onload = async () => {
+        const { canvasX, canvasY } = await screenToCanvas(innerWidth / 2, innerHeight / 2)
+        const width = img.width / state.scale / 2
+        const height = img.height / state.scale / 2
+
+        drawShape({
+          fillColor: 'transparent',
+          leftX: canvasX - width,
+          rightX: width + canvasX,
+          topY: canvasY - height,
+          bottomY: height + canvasY,
+          type: 'image',
+          src,
+        })
+      }
+      img.src = src
+    }
+    file ? reader.readAsDataURL(file) : handleErr()
   })
 
   useOnWindow(
@@ -290,10 +447,13 @@ export default component$(() => {
       state.shiftKey = shiftKey
       state.altKey = altKey
 
-      state.commandText = ''
       console.log(key)
 
       switch (key) {
+        case 'F':
+        case 'f':
+          state.commandText = 'Bring to Front'
+          break
         case 'Backspace':
           state.shapes = state.shapes.filter((shape) => state.selectedShape?.id !== shape.id)
           saveState()
@@ -302,11 +462,23 @@ export default component$(() => {
         case 'Shift':
           state.commandText = 'Move'
           break
-        case 'f':
-          state.commandText = 'Bring to Front'
-          break
         case 'Meta':
           state.commandText = 'Zoom / Pan'
+          break
+        case 'c':
+          state.currShapeType = 'circle'
+          state.commandText = 'Circle'
+          break
+        case 'r':
+          state.currShapeType = 'rectangle'
+          state.commandText = 'Rectangle'
+          break
+        case 't':
+          state.currShapeType = 'triangle'
+          state.commandText = 'Triangle'
+          break
+        case 'i':
+          state.commandText = 'Image'
           break
         case 'z':
           if (shiftKey && metaKey) {
@@ -341,8 +513,8 @@ export default component$(() => {
       e.preventDefault()
       if (!e.metaKey) return
 
-      const zoomPointX = e.clientX - window.innerWidth / 2
-      const zoomPointY = e.clientY - window.innerHeight / 2
+      const zoomPointX = e.clientX - innerWidth / 2
+      const zoomPointY = e.clientY - innerHeight / 2
 
       let delta = e.wheelDelta
       if (delta === undefined) delta = e.originalEvent.detail // we are on firefox
@@ -375,45 +547,110 @@ export default component$(() => {
         </div>
 
         <div class="flex gap-1 text-lg text-white absolute bottom-4 left-4 z-10">
-          <button onClick$={undoState} class="h-8 w-8 grid place-items-center border border-slate-700 rounded">
+          <button
+            onClick$={undoState}
+            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded"
+          >
             <Undo />
           </button>
 
-          <button onClick$={redoState} class="h-8 w-8 grid place-items-center border border-slate-700 rounded">
+          <button
+            onClick$={redoState}
+            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded"
+          >
             <Redo />
           </button>
 
-          <button class="h-8 px-4 text-xs border border-slate-700 rounded" onClick$={clearShapes}>
+          <button class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded" onClick$={clearShapes}>
             Clear
           </button>
 
-          <button class="h-8 px-4 text-xs border border-slate-700 rounded" onClick$={() => (state.scale = 1)}>
+          <button
+            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded"
+            onClick$={() => (state.scale = 1)}
+          >
             {(state.scale * 100).toFixed(0)}%
           </button>
 
           <button
-            class="h-8 px-4 text-xs border border-slate-700 rounded"
-            onClick$={() => {
-              state.zoomPos = { x: 0, y: 0 }
-            }}
+            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
+            ${state.currShapeType === 'rectangle' && 'bg-stone-800'}`}
+            onClick$={() => (state.currShapeType = 'rectangle')}
           >
-            Pos {state.zoomPos.x.toFixed(0)},{state.zoomPos.y.toFixed(0)}
+            <Rectangle />
+            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">r</span>
           </button>
+
+          <button
+            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
+            ${state.currShapeType === 'circle' && 'bg-stone-800'}`}
+            onClick$={() => (state.currShapeType = 'circle')}
+          >
+            <Circle />
+            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">c</span>
+          </button>
+
+          <button
+            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
+            ${state.currShapeType === 'triangle' && 'bg-stone-800'}`}
+            onClick$={() => (state.currShapeType = 'triangle')}
+          >
+            <Triangle />
+            <kbd class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">t</kbd>
+          </button>
+
+          <div
+            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 grid place-items-center
+            ${state.currShapeType === 'image' && 'bg-stone-800'}`}
+          >
+            <input
+              type="file"
+              onChange$={handleFileInput}
+              class="appearance-none absolute max-w-full w-full max-h-full h-full left-0 top-0 cursor-pointer opacity-0"
+            />
+
+            <ImageFile />
+            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">i</span>
+          </div>
         </div>
 
         <div class="absolute top-4 right-4 z-10">
-          <div
-            class={`text-white px-4 h-8 text-xs border border-slate-700 rounded grid place-items-center 
-      ${!state.commandText && 'hidden'}`}
-          >
-            {state.commandText}
+          <div class="relative text-white">
+            <button
+              class="px-4 h-8 text-xs border border-slate-700 bg-stone-900 rounded grid place-items-center"
+              onClick$={() => (state.showKeyShortcuts = !state.showKeyShortcuts)}
+            >
+              {state.commandText ? state.commandText : <Keyboard />}
+            </button>
+
+            {state.showKeyShortcuts && (
+              <div class="absolute right-0 top-[calc(100%+8px)] px-4 w-max text-xs border border-slate-700 rounded">
+                {KeyboardCommands.map((shortcut) => (
+                  <span class="flex justify-between my-3 w-48">
+                    <span>{shortcut.command}</span>{' '}
+                    <span class="flex align-center">
+                      {shortcut.key.split(' ').map((key) => (
+                        <kbd class="ml-1 text-[10px] text-xs leading-[110%] py-[4px] px-[3px] min-w-[20px] inline-grid place-items-center text-center rounded bg-stone-700">
+                          {(() => {
+                            if (key === '⇧') return <Shift />
+                            if (key === '⌘') return <Command />
+                            if (key === '⌫') return <Backspace />
+                            return key
+                          })()}
+                        </kbd>
+                      ))}
+                    </span>
+                  </span>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       </>
 
       {/* Canvas */}
       <div
-        class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute top-0 left-0 z-0"
+        class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute top-0 left-0 z-0 touch-pan-y touch-pan-x"
         onMouseDown$={handleCanvasMouseDown}
         onMouseMove$={handleCanvasMouseMove}
         onMouseUp$={handleCanvasMouseUp}
@@ -428,8 +665,8 @@ export default component$(() => {
         >
           {/* Drawn Shapes */}
           {state.shapes.map((shape) => {
-            const dotSize = 8
-            const dotPos = -(dotSize / 2 / state.scale + 2 / state.scale) + 'px'
+            const dotSize = 12
+            const dotPos = -(dotSize / 2 / state.scale) + 'px'
             const isSelected = state.selectedShape?.id === shape.id
 
             return (
@@ -444,35 +681,39 @@ export default component$(() => {
                     '--top': shape.topY + 'px',
                     '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
                     '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
-                    '--border-radius': shape.borderRadius + 'px',
+                    '--border-radius': shape.borderRadius,
                     '--background': shape.fillColor,
                   }}
                 >
-                  {isSelected && (
-                    <div
-                      class="h-full w-full relative"
-                      style={{ border: isSelected ? 2 / state.scale + 'px solid white' : 'none' }}
-                    >
-                      {/* Resize Dots */}
-                      {[
-                        { top: dotPos, left: dotPos },
-                        { top: dotPos, right: dotPos },
-                        { bottom: dotPos, left: dotPos },
-                        { bottom: dotPos, right: dotPos },
-                      ].map((dotLocation) => (
-                        <span
-                          onMouseDown$={handleShapeResizeMouseDown}
-                          preventdefault:mousedown
-                          class="absolute bg-white rounded-full cursor-pointer"
-                          style={{
-                            height: dotSize / state.scale + 'px',
-                            width: dotSize / state.scale + 'px',
-                            ...dotLocation,
-                          }}
-                        />
-                      ))}
-                    </div>
-                  )}
+                  <div class="h-full w-full relative">
+                    {shape.type === 'image' && <img src={shape.src} alt="Shape Image" class="h-full w-full absolute" />}
+
+                    {isSelected && (
+                      <div
+                        class="h-full w-full absolute"
+                        style={{ border: isSelected ? 2 / state.scale + 'px solid white' : 'none' }}
+                      >
+                        {/* Resize Dots */}
+                        {[
+                          { top: dotPos, left: dotPos },
+                          { top: dotPos, right: dotPos },
+                          { bottom: dotPos, left: dotPos },
+                          { bottom: dotPos, right: dotPos },
+                        ].map((dotLocation, i) => (
+                          <span
+                            onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
+                            preventdefault:mousedown
+                            class="absolute cursor-pointer"
+                            style={{
+                              height: dotSize / state.scale + 'px',
+                              width: dotSize / state.scale + 'px',
+                              ...dotLocation,
+                            }}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
                 </span>
               </>
             )
