@@ -185,36 +185,39 @@ export default component$(() => {
   })
 
   const moveShapeCorner = $(async (xDiff: number, yDiff: number, shape: Shape, corner: number) => {
+    if (!state.resizeMouseDownCoords) return
     let { leftX, topY, rightX, bottomY } = shape
 
     // Top Left
     if (corner === 0) {
-      if (bottomY <= topY + yDiff) {
-        leftX += xDiff
-        bottomY += yDiff
-      } else {
-        leftX += xDiff
-        topY += yDiff
-      }
+      leftX += xDiff
+      topY += yDiff
+      if (leftX > rightX) state.resizeMouseDownCoords.corner = 1
+      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 2
     }
     // Top Right
     else if (corner === 1) {
       rightX += xDiff
       topY += yDiff
+      if (leftX > rightX) state.resizeMouseDownCoords.corner = 0
+      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 3
     }
     // Bottom Left
     else if (corner === 2) {
       leftX += xDiff
       bottomY += yDiff
+      if (leftX > rightX) state.resizeMouseDownCoords.corner = 3
+      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 0
     }
     // Bottom Right
     else if (corner === 3) {
       rightX += xDiff
       bottomY += yDiff
+      if (leftX > rightX) state.resizeMouseDownCoords.corner = 2
+      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 1
     }
 
     const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
-    console.log({ ...correctedCoords })
     shape.leftX = correctedCoords.leftX
     shape.topY = correctedCoords.topY
     shape.rightX = correctedCoords.rightX
@@ -339,7 +342,8 @@ export default component$(() => {
       const { clientX: startX, clientY: startY, corner } = state.resizeMouseDownCoords
       const { xDiff, yDiff } = await getScreenCoordDiff(startX, startY)
       moveShapeCorner(xDiff, yDiff, state.selectedShape, corner)
-      state.resizeMouseDownCoords = { clientX, clientY, corner }
+      state.resizeMouseDownCoords.clientX = clientX
+      state.resizeMouseDownCoords.clientY = clientY
     }
 
     state.canvasMouseMoveCoords = { clientX, clientY }
@@ -686,7 +690,9 @@ export default component$(() => {
                   }}
                 >
                   <div class="h-full w-full relative">
-                    {shape.type === 'image' && <img src={shape.src} alt="Shape Image" class="h-full w-full absolute" />}
+                    {shape.type === 'image' && (
+                      <img src={shape.src} alt="Shape Image" class="h-full w-full absolute object-cover" />
+                    )}
 
                     {isSelected && (
                       <div
