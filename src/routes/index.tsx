@@ -3,7 +3,7 @@ import type { QwikChangeEvent, QwikMouseEvent } from '@builder.io/qwik'
 import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
 
-import styles from './ascii.css?inline'
+import styles from './index.css?inline'
 import ColorPicker from '~/components/ColorPicker'
 
 import { Redo } from '~/components/icons/redo'
