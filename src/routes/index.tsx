@@ -4,7 +4,7 @@ import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
 
 import styles from './ascii.css?inline'
-import Colors from '~/components/colors'
+import ColorPicker from '~/components/ColorPicker'
 
 import { Redo } from '~/components/icons/redo'
 import { Undo } from '~/components/icons/undo'
@@ -15,54 +15,20 @@ import { Backspace } from '~/components/icons/backspace'
 import { Rectangle } from '~/components/icons/retangle'
 import { Circle } from '~/components/icons/circle'
 import { ImageFile } from '~/components/icons/imageFile'
-import { Triangle } from '~/components/icons/triangle'
+// import { Triangle } from '~/components/icons/triangle'
 
 const KeyboardCommands = [
-  {
-    key: '⇧ Click',
-    command: 'Move',
-  },
-  {
-    key: 'F Click',
-    command: 'Bring to Front',
-  },
-  {
-    key: '⌘ Scroll',
-    command: 'Zoom',
-  },
-  {
-    key: '⌘ Drag',
-    command: 'Pan',
-  },
-  {
-    key: '⌘ Z',
-    command: 'Undo',
-  },
-  {
-    key: '⇧ ⌘ Z',
-    command: 'Redo',
-  },
-  {
-    key: '⌫',
-    command: 'Delete',
-  },
-
-  {
-    key: 'c',
-    command: 'Circle',
-  },
-  {
-    key: 'r',
-    command: 'Rectangle',
-  },
-  {
-    key: 't',
-    command: 'Triangle',
-  },
-  {
-    key: 'i',
-    command: 'Image',
-  },
+  { key: '⇧ Click', command: 'Move' },
+  { key: 'F Click', command: 'Bring to Front' },
+  { key: '⌘ Scroll', command: 'Zoom' },
+  { key: '⌘ Drag', command: 'Pan' },
+  { key: '⌘ Z', command: 'Undo' },
+  { key: '⇧ ⌘ Z', command: 'Redo' },
+  { key: '⌫', command: 'Delete' },
+  { key: 'c', command: 'Circle' },
+  { key: 'r', command: 'Rectangle' },
+  // { key: 't', command: 'Triangle' },
+  { key: 'i', command: 'Image' },
 ]
 
 interface Shape {
@@ -91,7 +57,6 @@ export interface State {
   currShapeType: Shape['type']
 
   selectedColor: string
-  baseColor: string
 
   scale: number
   maxScale: number
@@ -123,8 +88,7 @@ export default component$(() => {
       savesCount: 0,
       currShapeType: 'rectangle',
 
-      selectedColor: 'rgb(255,0,0)',
-      baseColor: 'rgb(255,0,0)',
+      selectedColor: 'rgb(0, 0, 255)',
 
       scale: 1,
       maxScale: 4,
@@ -369,8 +333,6 @@ export default component$(() => {
     state.canvasMouseDownCoords = null
     state.shapeMouseDownCoords = null
     state.resizeMouseDownCoords = null
-
-    saveState()
   })
 
   const previewStyle = useResource$<any>(async ({ track }) => {
@@ -542,66 +504,55 @@ export default component$(() => {
       {/* Controls */}
       <>
         <div class="absolute top-4 left-4 z-10">
-          <Colors
+          <ColorPicker
             selectedColor={state.selectedColor}
             setSelectedColor={$((color: string) => (state.selectedColor = color))}
-            baseColor={state.baseColor}
-            setBaseColor={$((color: string) => (state.baseColor = color))}
           />
         </div>
 
         <div class="flex gap-1 text-lg text-white absolute bottom-4 left-4 z-10">
           <button
             onClick$={undoState}
-            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded"
+            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
           >
             <Undo />
           </button>
 
           <button
             onClick$={redoState}
-            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded"
+            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
           >
             <Redo />
           </button>
 
-          <button class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded" onClick$={clearShapes}>
+          <button
+            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
+            onClick$={clearShapes}
+          >
             Clear
           </button>
 
           <button
-            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded"
+            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
             onClick$={() => (state.scale = 1)}
           >
             {(state.scale * 100).toFixed(0)}%
           </button>
 
-          <button
-            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
-            ${state.currShapeType === 'rectangle' && 'bg-stone-800'}`}
-            onClick$={() => (state.currShapeType = 'rectangle')}
-          >
-            <Rectangle />
-            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">r</span>
-          </button>
-
-          <button
-            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
-            ${state.currShapeType === 'circle' && 'bg-stone-800'}`}
-            onClick$={() => (state.currShapeType = 'circle')}
-          >
-            <Circle />
-            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">c</span>
-          </button>
-
-          <button
-            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 
-            ${state.currShapeType === 'triangle' && 'bg-stone-800'}`}
-            onClick$={() => (state.currShapeType = 'triangle')}
-          >
-            <Triangle />
-            <kbd class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">t</kbd>
-          </button>
+          {[
+            { icon: <Rectangle />, shape: 'rectangle', shortcut: 'r' },
+            { icon: <Circle />, shape: 'circle', shortcut: 'c' },
+            // { icon: <Triangle />, shape: 'triangle', shortcut: 't' },
+          ].map(({ icon, shape, shortcut }) => (
+            <button
+              class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 transition duration-100
+            ${state.currShapeType === shape && '!bg-slate-700'}`}
+              onClick$={() => (state.currShapeType = shape as State['currShapeType'])}
+            >
+              {icon}
+              <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">{shortcut}</span>
+            </button>
+          ))}
 
           <div
             class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 grid place-items-center
