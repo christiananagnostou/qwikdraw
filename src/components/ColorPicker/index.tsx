@@ -2,7 +2,7 @@ import type { QRL } from '@builder.io/qwik'
 import { useTask$, useStore, useOnDocument } from '@builder.io/qwik'
 import { component$, $ } from '@builder.io/qwik'
 
-export const Colors = [
+const Colors = [
   'rgb(255,0,0)',
   'rgb(255,0,255)',
   'rgb(0,0,255)',
@@ -19,29 +19,23 @@ const Palate = {
 
 interface Props {
   selectedColor: string
-  baseColor: string
   setSelectedColor: QRL<(color: string) => string>
-  setBaseColor: QRL<(color: string) => string>
 }
 
-export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, setBaseColor }) => {
+export default component$<Props>(({ selectedColor, setSelectedColor }) => {
   const state = useStore({
     showColorPicker: false,
-    palatePercentX: 80,
-    palatePercentY: 20,
+    baseColor: [0, 0, 0],
+    palatePercentX: 100,
+    palatePercentY: 0,
     barPercentX: 0,
     mouseDownPalate: false,
     mouseDownBar: false,
   })
 
   const calcPalateColor = $((percentX: number, percentY: number) => {
-    const baseRGB = baseColor.slice(baseColor.indexOf('(') + 1, -1).split(',')
-    // (255 - (percentX * baseXDiff)) * (lightness percent)
-    const rgb = baseRGB.map((val) => (255 - (percentX / 100) * (255 - parseInt(val))) * (1 - percentY / 100))
+    const rgb = state.baseColor.map((val) => (255 - (percentX / 100) * (255 - val)) * (1 - percentY / 100))
     setSelectedColor(`rgb(${rgb})`)
-
-    state.palatePercentX = percentX
-    state.palatePercentY = percentY
   })
 
   const calcBarColor = $((percentX: number) => {
@@ -55,8 +49,7 @@ export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, 
     rgb[2 - segment] = Math.min(segmentFactor, 255)
     rgb[[0, 2, 1][segment]] = 255 - Math.max(0, segmentFactor - 255)
 
-    setBaseColor(`rgb(${rgb})`)
-    state.barPercentX = percentX
+    state.baseColor = rgb
   })
 
   // Palate mouse move handler
@@ -68,6 +61,8 @@ export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, 
     const percentY = (offsetY / Palate.height) * 100
 
     calcPalateColor(percentX, percentY)
+    state.palatePercentX = percentX
+    state.palatePercentY = percentY
   })
 
   // Bar mouse move handler
@@ -78,11 +73,44 @@ export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, 
     const { scrollWidth } = e.target
 
     const percentX = (offsetX / scrollWidth) * 100
+
     calcBarColor(percentX)
+    state.barPercentX = percentX
+  })
+
+  // Calculate Base Color from Selected Color
+  useTask$(() => {
+    const [r, g, b] = selectedColor
+      .substring(selectedColor.indexOf('(') + 1, selectedColor.indexOf(')'))
+      .split(',')
+      .map((t) => parseInt(t))
+
+    const rgbObj = { r, g, b }
+
+    const [first, second, third] = Object.entries(rgbObj).sort((a, b) => b[1] - a[1]) as ['r' | 'g' | 'b', number][]
+
+    const ratioOfSecond = (1 / (first[1] / 255)) * second[1]
+    const ratioOfThird = (1 / (first[1] / 255)) * third[1]
+
+    const dropBoth = second[1] === third[1]
+
+    console.log(ratioOfSecond, ratioOfThird)
+
+    rgbObj[second[0]] = dropBoth ? 0 : ratioOfThird > 0 ? (ratioOfSecond + ratioOfThird) / 2 : ratioOfSecond
+    rgbObj[first[0]] = 255
+    rgbObj[third[0]] = 0
+
+    console.log(rgbObj)
+
+    state.baseColor = Object.values(rgbObj)
+
+    const segments = { r: 0, g: 66.66, b: 33.33 }
+    console.log(segments[first[0]] + (second[1] / 255) * (100 / 3))
+    state.barPercentX = segments[first[0]] + (second[1] / 255) * (100 / 3)
   })
 
   useTask$(({ track }) => {
-    track(() => baseColor)
+    track(() => state.baseColor)
     calcPalateColor(state.palatePercentX, state.palatePercentY)
   })
 
@@ -113,7 +141,7 @@ export default component$<Props>(({ selectedColor, baseColor, setSelectedColor, 
             onMouseMove$={(e) => handlePalateMouseEvent(e, false)}
             onClick$={(e) => handlePalateMouseEvent(e, true)}
           >
-            <div class="absolute inset w-full h-full" style={{ background: baseColor }}>
+            <div class="absolute inset w-full h-full" style={{ background: `rgb(${state.baseColor})` }}>
               <div
                 class="absolute inset-0"
                 style="background: linear-gradient(to right, rgb(255, 255, 255), rgba(255, 255, 255, 0));"
