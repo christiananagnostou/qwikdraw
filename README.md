@@ -49,4 +49,4 @@ Contributions to QwikDraw are welcome! If you find any issues or have ideas for 
 
 ## License
 
-QwikDraw is released under the [GNU General Public License](LICENSE).
+QwikDraw is released under the [GNU General Public License](LICENSE). 
