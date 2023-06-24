@@ -88,7 +88,7 @@ export default component$(() => {
       savesCount: 0,
       currShapeType: 'rectangle',
 
-      selectedColor: 'rgb(0, 0, 255)',
+      selectedColor: 'rgb(0, 255, 255)',
 
       scale: 1,
       maxScale: 4,
@@ -224,6 +224,7 @@ export default component$(() => {
       if (src && shape.type === 'image') shape.src = src
       state.shapes.push(shape)
       saveState()
+      state.selectedShape = shape
     }
   )
 
@@ -503,6 +504,7 @@ export default component$(() => {
     <>
       {/* Controls */}
       <>
+        {/* Color Picker */}
         <div class="absolute top-4 left-4 z-10">
           <ColorPicker
             selectedColor={state.selectedColor}
@@ -532,6 +534,7 @@ export default component$(() => {
             Clear
           </button>
 
+          {/* Zoom */}
           <button
             class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
             onClick$={() => (state.scale = 1)}
@@ -539,6 +542,7 @@ export default component$(() => {
             {(state.scale * 100).toFixed(0)}%
           </button>
 
+          {/* Shapes */}
           {[
             { icon: <Rectangle />, shape: 'rectangle', shortcut: 'r' },
             { icon: <Circle />, shape: 'circle', shortcut: 'c' },
@@ -554,6 +558,7 @@ export default component$(() => {
             </button>
           ))}
 
+          {/* Image Input */}
           <div
             class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 grid place-items-center
             ${state.currShapeType === 'image' && 'bg-stone-800'}`}
@@ -569,6 +574,7 @@ export default component$(() => {
           </div>
         </div>
 
+        {/* Keyboard Shortcuts */}
         <div class="absolute top-4 right-4 z-10">
           <div class="relative text-white">
             <button
@@ -630,7 +636,9 @@ export default component$(() => {
                   onClick$={() => handleShapeClick(shape)}
                   onMouseDown$={(e) => handleShapeMouseDown(e, shape)}
                   preventdefault:mousedown
-                  class="shape absolute"
+                  class={`shape absolute
+                   ${state.keyDown === 'Shift' && 'cursor-grab active:cursor-grabbing'}
+                   ${state.commandText == 'Bring to Front' && 'cursor-crosshair'}`}
                   style={{
                     '--left': shape.leftX + 'px',
                     '--top': shape.topY + 'px',
@@ -642,25 +650,27 @@ export default component$(() => {
                 >
                   <div class="h-full w-full relative">
                     {shape.type === 'image' && (
-                      <img src={shape.src} alt="Shape Image" class="h-full w-full absolute object-cover" />
+                      <img src={shape.src} alt="Shape Image" class="h-full w-full absolute object-contain" />
                     )}
 
                     {isSelected && (
-                      <div
-                        class="h-full w-full absolute"
-                        style={{ border: isSelected ? 2 / state.scale + 'px solid white' : 'none' }}
-                      >
+                      <>
+                        {/* Selected Border */}
+                        <span
+                          class="h-full w-full absolute"
+                          style={{ border: isSelected ? 1.5 / state.scale + 'px solid white' : 'none' }}
+                        />
+
                         {/* Resize Dots */}
                         {[
-                          { top: dotPos, left: dotPos },
-                          { top: dotPos, right: dotPos },
-                          { bottom: dotPos, left: dotPos },
-                          { bottom: dotPos, right: dotPos },
+                          { top: dotPos, left: dotPos, cursor: 'nw-resize' },
+                          { top: dotPos, right: dotPos, cursor: 'ne-resize' },
+                          { bottom: dotPos, left: dotPos, cursor: 'sw-resize' },
+                          { bottom: dotPos, right: dotPos, cursor: 'se-resize' },
                         ].map((dotLocation, i) => (
                           <span
                             onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
-                            preventdefault:mousedown
-                            class="absolute cursor-pointer"
+                            class="absolute"
                             style={{
                               height: dotSize / state.scale + 'px',
                               width: dotSize / state.scale + 'px',
@@ -668,7 +678,25 @@ export default component$(() => {
                             }}
                           />
                         ))}
-                      </div>
+
+                        {/* Toolbar */}
+                        <div class="absolute bottom-full left-0 right-0 m-auto border border-red-500">
+                          <label for="border radius">
+                            <input
+                              onMouseDown$={(e) => e.stopPropagation()}
+                              type="range"
+                              min="0"
+                              max="50"
+                              step="0.5"
+                              value={0}
+                              // @ts-ignore
+                              onInput$={(e) => (shape.borderRadius = parseInt(e.target?.value || 0) + '%')}
+                              name="border radius"
+                            />
+                            <span class="sr-only"> Border Radius</span>
+                          </label>
+                        </div>
+                      </>
                     )}
                   </div>
                 </span>
