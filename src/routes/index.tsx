@@ -21,7 +21,7 @@ const KeyboardCommands = [
   { key: '⇧ Click', command: 'Move' },
   { key: 'F Click', command: 'Bring to Front' },
   { key: '⌘ Scroll', command: 'Zoom' },
-  { key: '⌘ Drag', command: 'Pan' },
+  { key: 'Space Drag', command: 'Pan' },
   { key: '⌘ Z', command: 'Undo' },
   { key: '⇧ ⌘ Z', command: 'Redo' },
   { key: '⌫', command: 'Delete' },
@@ -38,6 +38,7 @@ interface Shape {
   rightX: number
   bottomY: number
   borderRadius: string
+  rotate: string
   type: 'image' | 'rectangle' | 'circle' | 'triangle'
   src?: string
   id: string
@@ -49,6 +50,7 @@ export interface State {
   canvasMouseDownCoords: { clientX: number; clientY: number } | null
   shapeMouseDownCoords: { clientX: number; clientY: number } | null
   resizeMouseDownCoords: { clientX: number; clientY: number; corner: number } | null
+  rotateMouseDownCoords: { clientX: number; clientY: number } | null
 
   shapes: Shape[]
   selectedShape?: Shape
@@ -81,6 +83,7 @@ export default component$(() => {
       canvasMouseDownCoords: null,
       shapeMouseDownCoords: null,
       resizeMouseDownCoords: null,
+      rotateMouseDownCoords: null,
 
       shapes: [],
       selectedShape: undefined,
@@ -88,7 +91,7 @@ export default component$(() => {
       savesCount: 0,
       currShapeType: 'rectangle',
 
-      selectedColor: 'rgb(0, 255, 255)',
+      selectedColor: 'rgb(43, 27, 208)',
 
       scale: 1,
       maxScale: 4,
@@ -188,19 +191,6 @@ export default component$(() => {
     shape.bottomY = correctedCoords.bottomY
   })
 
-  // const shapeContainsPos = $(async (shape: Shape, x: number, y: number) => {
-  //   return shape.leftX <= x && shape.topY <= y && shape.rightX >= x && shape.bottomY >= y
-  // })
-
-  // const getIndexOfShapeAtPos = $(async (x: number, y: number) => {
-  //   let i = state.shapes.length
-  //   while (i--) {
-  //     const shape = state.shapes[i]
-  //     if (await shapeContainsPos(shape, x, y)) return i
-  //   }
-  //   return -1
-  // })
-
   const drawShape = $(
     async (props: {
       fillColor: string
@@ -217,7 +207,8 @@ export default component$(() => {
       const shape: Shape = {
         ...correctedCoords,
         fillColor,
-        borderRadius: state.currShapeType === 'circle' ? '50%' : '0px',
+        rotate: '0deg',
+        borderRadius: state.currShapeType === 'circle' ? '50%' : '0%',
         id: 'id' + new Date().getTime(),
         type: type || state.currShapeType,
       }
@@ -255,6 +246,12 @@ export default component$(() => {
     }
   })
 
+  // Rotate Mouse Handler
+  const handleShapeRotateMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
+    e.stopPropagation()
+    state.rotateMouseDownCoords = { clientX: e.clientX, clientY: e.clientY }
+  })
+
   // Resize Mouse Handler
   const handleShapeResizeMouseDown = $((e: QwikMouseEvent<HTMLSpanElement, MouseEvent>, corner: number) => {
     e.stopPropagation()
@@ -280,9 +277,14 @@ export default component$(() => {
     state.canvasMouseDownCoords = { clientX, clientY }
   })
 
+  /**
+   *
+   * Canvas Mouse Move Listener
+   *
+   */
   const handleCanvasMouseMove = $(async ({ clientX, clientY }: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
-    if (state.metaKey && state.canvasMouseDownCoords) {
-      // Pan Canvas
+    // Pan Canvas
+    if (state.commandText === 'Pan' && state.canvasMouseDownCoords) {
       state.zoomPos.x += clientX - (state.canvasMouseMoveCoords?.clientX || clientX)
       state.zoomPos.y += clientY - (state.canvasMouseMoveCoords?.clientY || clientY)
     }
@@ -311,9 +313,36 @@ export default component$(() => {
       state.resizeMouseDownCoords.clientY = clientY
     }
 
+    // Rotate Shape
+    if (state.rotateMouseDownCoords) {
+      if (!state.selectedShape) return
+
+      // const { clientX: startX, clientY: startY } = state.rotateMouseDownCoords
+      const { canvasX: startX, canvasY: startY } = await screenToCanvas(
+        state.rotateMouseDownCoords.clientX,
+        state.rotateMouseDownCoords.clientY
+      )
+      const { leftX, topY, rightX, bottomY } = state.selectedShape
+      const centerX = leftX + (rightX - leftX) / 2
+      const centerY = topY + (bottomY - topY) / 2
+
+      const radians = Math.atan2(startX - centerX, startY - centerY)
+      const cornerRadians = Math.atan2(rightX - centerX, topY - centerY)
+
+      state.selectedShape.rotate = -(radians - cornerRadians) + 'rad'
+
+      state.rotateMouseDownCoords.clientX = clientX
+      state.rotateMouseDownCoords.clientY = clientY
+    }
+
     state.canvasMouseMoveCoords = { clientX, clientY }
   })
 
+  /**
+   *
+   * Canvas Mouse Up Event Listener
+   *
+   */
   const handleCanvasMouseUp = $(async (e: QwikMouseEvent<HTMLSpanElement, MouseEvent>) => {
     const { clientX: endClientX, clientY: endClientY } = e
 
@@ -334,8 +363,14 @@ export default component$(() => {
     state.canvasMouseDownCoords = null
     state.shapeMouseDownCoords = null
     state.resizeMouseDownCoords = null
+    state.rotateMouseDownCoords = null
   })
 
+  /**
+   *
+   * Preview Style Resource
+   *
+   */
   const previewStyle = useResource$<any>(async ({ track }) => {
     const canvasMouseDownCoords = track(() => state.canvasMouseDownCoords)
     const canvasMouseMoveCoords = track(() => state.canvasMouseMoveCoords)
@@ -362,6 +397,11 @@ export default component$(() => {
     }
   })
 
+  /**
+   *
+   *
+   *
+   */
   const handleFileInput = $((e: QwikChangeEvent<HTMLInputElement>) => {
     if (!e.target.files) return
 
@@ -399,6 +439,11 @@ export default component$(() => {
     file ? reader.readAsDataURL(file) : handleErr()
   })
 
+  /**
+   *
+   *
+   *
+   */
   useOnWindow(
     'keydown',
     $((e: Event) => {
@@ -429,8 +474,11 @@ export default component$(() => {
         case 'Shift':
           state.commandText = 'Move'
           break
+        case ' ':
+          state.commandText = 'Pan'
+          break
         case 'Meta':
-          state.commandText = 'Zoom / Pan'
+          state.commandText = 'Zoom'
           break
         case 'c':
           state.currShapeType = 'circle'
@@ -463,6 +511,11 @@ export default component$(() => {
     })
   )
 
+  /**
+   *
+   *
+   *
+   */
   useOnWindow(
     'keyup',
     $(() => {
@@ -474,6 +527,11 @@ export default component$(() => {
     })
   )
 
+  /**
+   *
+   *
+   *
+   */
   useOnWindow(
     'wheel',
     $(async (e: any) => {
@@ -578,7 +636,7 @@ export default component$(() => {
         <div class="absolute top-4 right-4 z-10">
           <div class="relative text-white">
             <button
-              class="px-4 h-8 text-xs border border-slate-700 bg-stone-900 rounded grid place-items-center"
+              class="px-2 h-8 text-xs border border-slate-700 bg-stone-900 rounded grid place-items-center"
               onClick$={() => (state.showKeyShortcuts = !state.showKeyShortcuts)}
             >
               {state.commandText ? state.commandText : <Keyboard />}
@@ -611,7 +669,7 @@ export default component$(() => {
 
       {/* Canvas */}
       <div
-        class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute top-0 left-0 z-0 touch-pan-y touch-pan-x"
+        class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute top-0 left-0 z-0 touch-pan-y touch-pan-x select-none"
         onMouseDown$={handleCanvasMouseDown}
         onMouseMove$={handleCanvasMouseMove}
         onMouseUp$={handleCanvasMouseUp}
@@ -619,7 +677,7 @@ export default component$(() => {
         preventdefault:mouseup
       >
         <div
-          class="h-full w-full"
+          class="canvas h-full w-full"
           style={{
             transform: 'translate(' + state.zoomPos.x + 'px,' + state.zoomPos.y + 'px) scale(' + state.scale + ')',
           }}
@@ -629,6 +687,8 @@ export default component$(() => {
             const dotSize = 12
             const dotPos = -(dotSize / 2 / state.scale) + 'px'
             const isSelected = state.selectedShape?.id === shape.id
+            const height = Math.abs(shape.bottomY - shape.topY || 1)
+            const width = Math.abs(shape.rightX - shape.leftX || 1)
 
             return (
               <>
@@ -636,21 +696,26 @@ export default component$(() => {
                   onClick$={() => handleShapeClick(shape)}
                   onMouseDown$={(e) => handleShapeMouseDown(e, shape)}
                   preventdefault:mousedown
-                  class={`shape absolute
+                  class={`shape absolute 
                    ${state.keyDown === 'Shift' && 'cursor-grab active:cursor-grabbing'}
                    ${state.commandText == 'Bring to Front' && 'cursor-crosshair'}`}
                   style={{
                     '--left': shape.leftX + 'px',
                     '--top': shape.topY + 'px',
-                    '--height': Math.abs(shape.bottomY - shape.topY || 1) + 'px',
-                    '--width': Math.abs(shape.rightX - shape.leftX || 1) + 'px',
+                    '--height': height + 'px',
+                    '--width': width + 'px',
                     '--border-radius': shape.borderRadius,
+                    '--rotate': shape.rotate,
                     '--background': shape.fillColor,
                   }}
                 >
                   <div class="h-full w-full relative">
                     {shape.type === 'image' && (
-                      <img src={shape.src} alt="Shape Image" class="h-full w-full absolute object-contain" />
+                      <img
+                        src={shape.src}
+                        alt="Shape Image"
+                        class="h-full w-full absolute object-contain rounded-[var(--border-radius)]"
+                      />
                     )}
 
                     {isSelected && (
@@ -658,7 +723,7 @@ export default component$(() => {
                         {/* Selected Border */}
                         <span
                           class="h-full w-full absolute"
-                          style={{ border: isSelected ? 1.5 / state.scale + 'px solid white' : 'none' }}
+                          style={{ border: isSelected ? 1 / state.scale + 'px solid white' : 'none' }}
                         />
 
                         {/* Resize Dots */}
@@ -679,22 +744,69 @@ export default component$(() => {
                           />
                         ))}
 
-                        {/* Toolbar */}
-                        <div class="absolute bottom-full left-0 right-0 m-auto border border-red-500">
-                          <label for="border radius">
+                        {/* Border Radius Control */}
+                        <div
+                          class="absolute top-0 bottom-0 m-auto w-2 h-fit transition-opacity"
+                          style={{
+                            '--slider-width': `8px`,
+                            '--slider-height': `clamp(50px, ${height / 2}px, ${(130 + height / 4) * state.scale}px)`,
+                            left: `calc(100% + calc(.75rem * ${1 / state.scale}))`,
+                            scale: 1 / state.scale,
+                            opacity: state.rotateMouseDownCoords ? '0' : '1',
+                          }}
+                        >
+                          <div class="flex justify-center items-center rotate-90 -mb-4">
                             <input
+                              style={{ minWidth: `var(--slider-height)` }}
+                              class="selected-shape__range cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
                               onMouseDown$={(e) => e.stopPropagation()}
                               type="range"
                               min="0"
                               max="50"
                               step="0.5"
-                              value={0}
+                              value={parseInt(shape.borderRadius)}
                               // @ts-ignore
                               onInput$={(e) => (shape.borderRadius = parseInt(e.target?.value || 0) + '%')}
-                              name="border radius"
                             />
-                            <span class="sr-only"> Border Radius</span>
-                          </label>
+                            <output class="text-gray-400 w-4 text-[.65rem] flex items-center justify-between -rotate-90">
+                              {shape.borderRadius}
+                            </output>
+                          </div>
+                        </div>
+
+                        {/* Rotate Control */}
+                        <div
+                          class="slider absolute left-full bottom-full text-gray-500 cursor-grab active:cursor-grabbing"
+                          onMouseDown$={(e) => handleShapeRotateMouseDown(e)}
+                        >
+                          <div class="relative">
+                            <svg
+                              style={{ opacity: state.rotateMouseDownCoords ? '0' : '1', rotate: '25deg' }}
+                              class="transition-opacity"
+                              stroke="currentColor"
+                              fill="currentColor"
+                              stroke-width="0"
+                              viewBox="0 0 256 256"
+                              height={20 / state.scale + 'px'}
+                              width={20 / state.scale + 'px'}
+                              xmlns="http://www.w3.org/2000/svg"
+                            >
+                              <path d="M236,184a12,12,0,0,1-24,0A84,84,0,0,0,68.6,124.6L53.11,140H88a12,12,0,0,1,0,24H24a12,12,0,0,1-12-12V88a12,12,0,0,1,24,0v35.16l15.66-15.55A108,108,0,0,1,236,184Z"></path>
+                            </svg>
+
+                            <span
+                              style={{
+                                opacity: state.rotateMouseDownCoords ? '1' : '0',
+                                rotate: `calc(-1 * ${shape.rotate})`,
+                              }}
+                              class="absolute left-full bottom-full text-gray-400 w-4 text-[.65rem] flex items-center justify-between cursor-pointer transition-opacity"
+                              onClick$={() => (shape.rotate = '0deg')}
+                            >
+                              {shape.rotate.includes('rad')
+                                ? (parseFloat(shape.rotate) * (180 / Math.PI)).toFixed(1) + 'º'
+                                : parseFloat(shape.rotate).toFixed(1) + 'º'}
+                            </span>
+                          </div>
                         </div>
                       </>
                     )}
