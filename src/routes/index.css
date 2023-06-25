@@ -1,54 +1,7 @@
-label {
-  display: inline-flex;
-  align-items: center;
-  margin-right: 2rem;
-}
-
 .canvas {
-  margin-top: 2rem;
-  display: grid;
-  grid-template-columns: repeat(var(--columns), 1fr);
-  grid-template-rows: repeat(var(--rows), 1rem);
-  text-align: center;
-  position: relative;
-}
-
-.cell {
-  background: var(--color);
-  position: relative;
-}
-
-.canvas::before,
-.canvas::after,
-.cell::before,
-.cell::after {
-  content: '';
-  position: absolute;
-  border-radius: 2px;
-  background: #888;
-  height: 2px;
-  width: 2px;
-  pointer-events: none;
-}
-.canvas::before {
-  top: -1px;
-  right: -1px;
-}
-.canvas::after {
-  bottom: -1px;
-  left: -1px;
-}
-.cell::before {
-  top: -1px;
-  left: -1px;
-}
-.cell::after {
-  bottom: -1px;
-  right: -1px;
-}
-
-.cell:hover {
-  filter: brightness(0.9);
+  /* background-image: radial-gradient(#535353 1px, transparent 0);
+  background-size: 40px 40px; */
+  /* background-position: -19px -19px; */
 }
 
 .shape {
@@ -58,4 +11,26 @@ label {
   width: var(--width);
   background: var(--background);
   border-radius: var(--border-radius);
+  rotate: var(--rotate);
+}
+
+/* Selected Shape Input Range */
+
+.selected-shape__range {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
+.selected-shape__range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--slider-width);
+  height: var(--slider-width);
+  border-radius: 50%;
+  background-color: rgb(150, 150, 170);
+  transition: all 0.25s ease;
+}
+
+.selected-shape__range:hover::-webkit-slider-thumb {
+  transform: scale(2);
+  background-color: rgb(220, 220, 240);
 }
