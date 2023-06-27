@@ -62,6 +62,7 @@ export interface State {
 
   scale: number
   maxScale: number
+  minScale: number
   zoomFactor: number
   zoomPos: { x: number; y: number }
 
@@ -95,7 +96,8 @@ export default component$(() => {
 
       scale: 1,
       maxScale: 4,
-      zoomFactor: 0.05,
+      minScale: 0.1,
+      zoomFactor: 0.03,
       zoomPos: { x: 0, y: 0 },
 
       commandText: '',
@@ -317,7 +319,6 @@ export default component$(() => {
     if (state.rotateMouseDownCoords) {
       if (!state.selectedShape) return
 
-      // const { clientX: startX, clientY: startY } = state.rotateMouseDownCoords
       const { canvasX: startX, canvasY: startY } = await screenToCanvas(
         state.rotateMouseDownCoords.clientX,
         state.rotateMouseDownCoords.clientY
@@ -529,7 +530,7 @@ export default component$(() => {
 
   /**
    *
-   *
+   * Zoom on mouse wheel event
    *
    */
   useOnWindow(
@@ -538,21 +539,20 @@ export default component$(() => {
       e.preventDefault()
       if (!e.metaKey) return
 
-      const zoomPointX = e.clientX - innerWidth / 2
-      const zoomPointY = e.clientY - innerHeight / 2
+      // Cursor pos relative to center of window
+      const zoomPointX = e.clientX - window.innerWidth / 2
+      const zoomPointY = e.clientY - window.innerHeight / 2
 
-      let delta = e.wheelDelta
-      if (delta === undefined) delta = e.originalEvent.detail // we are on firefox
-      delta = Math.max(-1, Math.min(1, delta)) // cap the delta to [-1,1] for cross browser consistency
-
-      // determine the point on where the slide is zoomed in
+      // Calc the point where cursor is on screen
       const { screenX, screenY } = await canvasToScreen(zoomPointX, zoomPointY)
 
-      // apply zoom
-      const newScale = state.scale + delta * state.zoomFactor * state.scale
-      state.scale = Math.max(0.1, Math.min(state.maxScale, newScale))
+      // Determine if zooming in or out
+      const direction = e.wheelDelta || e.originalEvent.detail // Chrome || Firefox
+      const delta = Math.max(-1, Math.min(1, direction)) // Cap the delta to [-1,1] for cross browser consistency
 
-      // calculate x and y based on zoom
+      const scale = state.scale + delta * state.zoomFactor * state.scale // Calculate new scale using previous scale
+      state.scale = Math.max(state.minScale, Math.min(state.maxScale, scale)) // Clamp scale between min and max
+
       state.zoomPos.x = -screenX * state.scale + zoomPointX
       state.zoomPos.y = -screenY * state.scale + zoomPointY
     })
