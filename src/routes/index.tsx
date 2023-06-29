@@ -728,10 +728,10 @@ export default component$(() => {
 
                         {/* Resize Dots */}
                         {[
-                          { top: dotPos, left: dotPos, cursor: 'nw-resize' },
-                          { top: dotPos, right: dotPos, cursor: 'ne-resize' },
-                          { bottom: dotPos, left: dotPos, cursor: 'sw-resize' },
-                          { bottom: dotPos, right: dotPos, cursor: 'se-resize' },
+                          { top: dotPos, left: dotPos, cursor: 'nwse-resize' },
+                          { top: dotPos, right: dotPos, cursor: 'nesw-resize' },
+                          { bottom: dotPos, left: dotPos, cursor: 'nesw-resize' },
+                          { bottom: dotPos, right: dotPos, cursor: 'nwse-resize' },
                         ].map((dotLocation, i) => (
                           <span
                             onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
