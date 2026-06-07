@@ -1,6 +1,5 @@
-import type { QRL } from '@builder.io/qwik'
-import { useTask$, useStore, useOnDocument } from '@builder.io/qwik'
-import { component$, $ } from '@builder.io/qwik'
+import { $, component$, useOnDocument, useStore, useTask$ } from '@builder.io/qwik'
+import type { QRL, QwikMouseEvent } from '@builder.io/qwik'
 
 const Colors = [
   'rgb(255,0,0)',
@@ -19,7 +18,7 @@ const Palate = {
 
 interface Props {
   selectedColor: string
-  setSelectedColor: QRL<(color: string) => string>
+  setSelectedColor: QRL<(color: string) => void>
 }
 
 export default component$<Props>(({ selectedColor, setSelectedColor }) => {
@@ -53,10 +52,10 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
   })
 
   // Palate mouse move handler
-  const handlePalateMouseEvent = $((e: any, skipMouseDown?: boolean) => {
+  const handlePalateMouseEvent = $((e: QwikMouseEvent<HTMLDivElement, MouseEvent>, skipMouseDown?: boolean) => {
     if (!state.mouseDownPalate && !skipMouseDown) return
 
-    const { offsetX, offsetY } = e
+    const { offsetX, offsetY } = e.nativeEvent
     const percentX = (offsetX / Palate.width) * 100
     const percentY = (offsetY / Palate.height) * 100
 
@@ -66,11 +65,11 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
   })
 
   // Bar mouse move handler
-  const handleColorBarEvent = $((e: any, skipMouseDown?: boolean) => {
+  const handleColorBarEvent = $((e: QwikMouseEvent<HTMLDivElement, MouseEvent>, skipMouseDown?: boolean) => {
     if (!state.mouseDownBar && !skipMouseDown) return
 
-    const { offsetX } = e
-    const { scrollWidth } = e.target
+    const { offsetX } = e.nativeEvent
+    const scrollWidth = (e.target as HTMLDivElement).scrollWidth
 
     const percentX = (offsetX / scrollWidth) * 100
 
@@ -94,18 +93,13 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
 
     const dropBoth = second[1] === third[1]
 
-    console.log(ratioOfSecond, ratioOfThird)
-
     rgbObj[second[0]] = dropBoth ? 0 : ratioOfThird > 0 ? (ratioOfSecond + ratioOfThird) / 2 : ratioOfSecond
     rgbObj[first[0]] = 255
     rgbObj[third[0]] = 0
 
-    console.log(rgbObj)
-
     state.baseColor = Object.values(rgbObj)
 
     const segments = { r: 0, g: 66.66, b: 33.33 }
-    console.log(segments[first[0]] + (second[1] / 255) * (100 / 3))
     state.barPercentX = segments[first[0]] + (second[1] / 255) * (100 / 3)
   })
 
@@ -128,6 +122,7 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
         style={{ background: selectedColor }}
         onClick$={() => (state.showColorPicker = !state.showColorPicker)}
         class="h-8 w-8 rounded"
+        title="Pick a color"
       />
 
       {state.showColorPicker && (
