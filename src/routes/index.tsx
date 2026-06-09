@@ -122,6 +122,8 @@ const getShapeCornerPoint = (shape: Shape, corner: number): Point => {
   }
 }
 
+const getResizeHandleAngle = (corner: number) => (corner === 0 || corner === 3 ? 45 : -45)
+
 export default component$(() => {
   useStylesScoped$(styles)
 
@@ -599,21 +601,54 @@ export default component$(() => {
                       <span class="h-full w-full absolute" style={{ border: `${1 / state.scale}px solid white` }} />
 
                       {[
-                        { top: dotPos, left: dotPos, cursor: 'nwse-resize' },
-                        { top: dotPos, right: dotPos, cursor: 'nesw-resize' },
-                        { bottom: dotPos, left: dotPos, cursor: 'nesw-resize' },
-                        { bottom: dotPos, right: dotPos, cursor: 'nwse-resize' },
+                        { top: dotPos, left: dotPos },
+                        { top: dotPos, right: dotPos },
+                        { bottom: dotPos, left: dotPos },
+                        { bottom: dotPos, right: dotPos },
                       ].map((dotLocation, i) => (
                         <span
                           key={i}
                           onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
-                          class="absolute"
+                          class="selected-shape__resize-handle absolute flex items-center justify-center"
                           style={{
                             height: `${dotSize / state.scale}px`,
                             width: `${dotSize / state.scale}px`,
+                            '--handle-icon-rotate': `${getResizeHandleAngle(i)}deg`,
                             ...dotLocation,
                           }}
-                        />
+                        >
+                          <svg
+                            class="selected-shape__resize-handle-icon overflow-visible"
+                            viewBox="0 0 24 24"
+                            aria-hidden="true"
+                          >
+                            <g transform="rotate(var(--handle-icon-rotate) 12 12)">
+                              <path
+                                d="M6.5 12h11"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-width="1.75"
+                              />
+                              <path
+                                d="M6.5 12l3-3M6.5 12l3 3"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="1.75"
+                              />
+                              <path
+                                d="M17.5 12l-3-3M17.5 12l-3 3"
+                                fill="none"
+                                stroke="currentColor"
+                                stroke-linecap="round"
+                                stroke-linejoin="round"
+                                stroke-width="1.75"
+                              />
+                            </g>
+                          </svg>
+                        </span>
                       ))}
 
                       <div
