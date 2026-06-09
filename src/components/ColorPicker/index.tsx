@@ -1,5 +1,5 @@
-import { $, component$, useOnDocument, useStore, useTask$ } from '@builder.io/qwik'
-import type { QRL, QwikMouseEvent } from '@builder.io/qwik'
+import { $, component$, useOnDocument, useSignal, useStore, useTask$, useVisibleTask$ } from '@builder.io/qwik'
+import type { QRL } from '@builder.io/qwik'
 
 const Colors = [
   'rgb(255,0,0)',
@@ -22,6 +22,9 @@ interface Props {
 }
 
 export default component$<Props>(({ selectedColor, setSelectedColor }) => {
+  const palateRef = useSignal<HTMLDivElement>()
+  const colorBarRef = useSignal<HTMLDivElement>()
+
   const state = useStore({
     showColorPicker: false,
     baseColor: [0, 0, 0],
@@ -38,7 +41,7 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
   })
 
   const calcBarColor = $((percentX: number) => {
-    percentX = Math.max(Math.min(99.99, percentX), 0) // 0 - 99.99
+    percentX = Math.max(Math.min(99.99, percentX), 0)
     const segmentSize = 100 / 3
 
     const segmentFactor = Math.round(((percentX % segmentSize) / segmentSize) * 2 * 255)
@@ -51,33 +54,6 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
     state.baseColor = rgb
   })
 
-  // Palate mouse move handler
-  const handlePalateMouseEvent = $((e: QwikMouseEvent<HTMLDivElement, MouseEvent>, skipMouseDown?: boolean) => {
-    if (!state.mouseDownPalate && !skipMouseDown) return
-
-    const { offsetX, offsetY } = e.nativeEvent
-    const percentX = (offsetX / Palate.width) * 100
-    const percentY = (offsetY / Palate.height) * 100
-
-    calcPalateColor(percentX, percentY)
-    state.palatePercentX = percentX
-    state.palatePercentY = percentY
-  })
-
-  // Bar mouse move handler
-  const handleColorBarEvent = $((e: QwikMouseEvent<HTMLDivElement, MouseEvent>, skipMouseDown?: boolean) => {
-    if (!state.mouseDownBar && !skipMouseDown) return
-
-    const { offsetX } = e.nativeEvent
-    const scrollWidth = (e.target as HTMLDivElement).scrollWidth
-
-    const percentX = (offsetX / scrollWidth) * 100
-
-    calcBarColor(percentX)
-    state.barPercentX = percentX
-  })
-
-  // Calculate Base Color from Selected Color
   useTask$(() => {
     const [r, g, b] = selectedColor
       .substring(selectedColor.indexOf('(') + 1, selectedColor.indexOf(')'))
@@ -116,6 +92,79 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
     })
   )
 
+  useVisibleTask$(({ cleanup, track }) => {
+    track(() => state.showColorPicker)
+
+    const palateEl = palateRef.value
+    const colorBarEl = colorBarRef.value
+
+    if (!state.showColorPicker || !palateEl || !colorBarEl) return
+
+    const updatePalate = (e: MouseEvent) => {
+      const rect = palateEl.getBoundingClientRect()
+      const percentX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / Palate.width) * 100))
+      const percentY = Math.max(0, Math.min(100, ((e.clientY - rect.top) / Palate.height) * 100))
+
+      calcPalateColor(percentX, percentY)
+      state.palatePercentX = percentX
+      state.palatePercentY = percentY
+    }
+
+    const updateColorBar = (e: MouseEvent) => {
+      const rect = colorBarEl.getBoundingClientRect()
+      const percentX = Math.max(0, Math.min(100, ((e.clientX - rect.left) / (rect.width || 1)) * 100))
+
+      calcBarColor(percentX)
+      state.barPercentX = percentX
+    }
+
+    const handlePalateMouseDown = (e: MouseEvent) => {
+      state.mouseDownPalate = true
+      updatePalate(e)
+    }
+
+    const handlePalateMouseMove = (e: MouseEvent) => {
+      if (!state.mouseDownPalate) return
+      updatePalate(e)
+    }
+
+    const handlePalateClick = (e: MouseEvent) => {
+      updatePalate(e)
+    }
+
+    const handleColorBarMouseDown = (e: MouseEvent) => {
+      state.mouseDownBar = true
+      updateColorBar(e)
+    }
+
+    const handleColorBarMouseMove = (e: MouseEvent) => {
+      if (!state.mouseDownBar) return
+      updateColorBar(e)
+    }
+
+    const handleColorBarClick = (e: MouseEvent) => {
+      updateColorBar(e)
+    }
+
+    palateEl.addEventListener('mousedown', handlePalateMouseDown)
+    palateEl.addEventListener('mousemove', handlePalateMouseMove)
+    palateEl.addEventListener('click', handlePalateClick)
+
+    colorBarEl.addEventListener('mousedown', handleColorBarMouseDown)
+    colorBarEl.addEventListener('mousemove', handleColorBarMouseMove)
+    colorBarEl.addEventListener('click', handleColorBarClick)
+
+    cleanup(() => {
+      palateEl.removeEventListener('mousedown', handlePalateMouseDown)
+      palateEl.removeEventListener('mousemove', handlePalateMouseMove)
+      palateEl.removeEventListener('click', handlePalateClick)
+
+      colorBarEl.removeEventListener('mousedown', handleColorBarMouseDown)
+      colorBarEl.removeEventListener('mousemove', handleColorBarMouseMove)
+      colorBarEl.removeEventListener('click', handleColorBarClick)
+    })
+  })
+
   return (
     <div class="flex flex-col gap-1">
       <button
@@ -127,14 +176,10 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
 
       {state.showColorPicker && (
         <div class="relative bg-slate-700 shadow-lg p-[2px] rounded-md">
-          {/* Color Palate */}
           <div
+            ref={palateRef}
             class="relative rounded overflow-hidden"
             style={{ height: Palate.height + 'px', width: Palate.width + 'px' }}
-            onMouseDown$={() => (state.mouseDownPalate = true)}
-            onMouseUp$={() => (state.mouseDownPalate = false)}
-            onMouseMove$={(e) => handlePalateMouseEvent(e, false)}
-            onClick$={(e) => handlePalateMouseEvent(e, true)}
           >
             <div class="absolute inset w-full h-full" style={{ background: `rgb(${state.baseColor})` }}>
               <div
@@ -146,7 +191,6 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
                   style="background: linear-gradient(to top, rgb(0, 0, 0), rgba(0, 0, 0, 0));"
                 ></div>
 
-                {/* Cursor */}
                 <div
                   class="absolute cursor-default pointer-events-none"
                   style={{ top: state.palatePercentY + '%', left: state.palatePercentX + '%' }}
@@ -162,14 +206,7 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
             </div>
           </div>
 
-          {/* Color Bar */}
-          <div
-            class="mt-[2px] w-full"
-            onMouseDown$={() => (state.mouseDownBar = true)}
-            onMouseUp$={() => (state.mouseDownBar = false)}
-            onMouseMove$={(e) => handleColorBarEvent(e, false)}
-            onClick$={(e) => handleColorBarEvent(e, true)}
-          >
+          <div ref={colorBarRef} class="mt-[2px] w-full">
             <div
               class="w-full h-6 rounded overflow-hidden relative"
               style={`background: linear-gradient(to right, ${Colors})`}
