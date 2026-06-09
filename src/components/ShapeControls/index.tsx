@@ -101,8 +101,8 @@ export default component$<Props>(({ selectedShape }) => {
               role="slider"
               tabIndex={0}
               class="shape-controls__slider-slot cursor-ns-resize"
+              preventdefault:mousedown
               onMouseDown$={(e) => {
-                e.preventDefault()
                 e.stopPropagation()
                 state.dragging = true
                 updateBorderRadius(e.clientY)
