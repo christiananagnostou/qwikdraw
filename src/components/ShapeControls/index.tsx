@@ -20,20 +20,22 @@ export default component$<Props>(({ selectedShape }) => {
           </output>
 
           <div class="flex flex-1 items-center justify-center py-3">
-            <input
-              aria-label="Border radius"
-              class="selected-shape__range selected-shape__range--vertical cursor-ns-resize outline-none appearance-none"
-              onMouseDown$={(e) => e.stopPropagation()}
-              style={{ '--slider-width': '18px' }}
-              type="range"
-              min="0"
-              max="50"
-              step="0.5"
-              value={borderRadius}
-              onInput$={(e) => {
-                selectedShape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
-              }}
-            />
+            <div class="shape-controls__slider-slot">
+              <input
+                aria-label="Border radius"
+                class="selected-shape__range selected-shape__range--vertical cursor-ns-resize outline-none appearance-none"
+                onMouseDown$={(e) => e.stopPropagation()}
+                style={{ '--slider-width': '18px' }}
+                type="range"
+                min="0"
+                max="50"
+                step="0.5"
+                value={borderRadius}
+                onInput$={(e) => {
+                  selectedShape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
+                }}
+              />
+            </div>
           </div>
 
           <div class="flex flex-col items-center gap-1 text-[10px] uppercase tracking-[0.16em] text-slate-400">
