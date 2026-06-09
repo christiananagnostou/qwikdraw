@@ -1,4 +1,4 @@
-import { $, component$, useOnDocument, useSignal, useStore, useStylesScoped$ } from '@builder.io/qwik'
+import { $, component$, useOnWindow, useSignal, useStore, useStylesScoped$ } from '@builder.io/qwik'
 
 import type { Shape } from '~/routes'
 
@@ -68,7 +68,7 @@ export default component$<Props>(({ selectedShape }) => {
     selectedShape.borderRadius = `${nextValue}%`
   })
 
-  useOnDocument(
+  useOnWindow(
     'mousemove',
     $((event) => {
       if (!state.dragging) return
@@ -76,7 +76,7 @@ export default component$<Props>(({ selectedShape }) => {
     })
   )
 
-  useOnDocument(
+  useOnWindow(
     'mouseup',
     $(() => {
       state.dragging = false
@@ -102,8 +102,13 @@ export default component$<Props>(({ selectedShape }) => {
               tabIndex={0}
               class="shape-controls__slider-slot cursor-ns-resize"
               onMouseDown$={(e) => {
+                e.preventDefault()
                 e.stopPropagation()
                 state.dragging = true
+                updateBorderRadius(e.clientY)
+              }}
+              onMouseMove$={(e) => {
+                if (!state.dragging) return
                 updateBorderRadius(e.clientY)
               }}
             >
