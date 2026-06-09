@@ -61,6 +61,67 @@ export interface State {
   showKeyShortcuts: boolean
 }
 
+interface Point {
+  x: number
+  y: number
+}
+
+const MIN_SHAPE_SIZE = 1
+
+const parseShapeRotation = (rotate: string) => {
+  if (rotate.endsWith('rad')) return parseFloat(rotate)
+  if (rotate.endsWith('deg')) return (parseFloat(rotate) * Math.PI) / 180
+  return 0
+}
+
+const rotatePoint = ({ x, y }: Point, radians: number): Point => ({
+  x: x * Math.cos(radians) - y * Math.sin(radians),
+  y: x * Math.sin(radians) + y * Math.cos(radians),
+})
+
+const getShapeCenter = (shape: Shape): Point => ({
+  x: shape.leftX + Math.abs(shape.rightX - shape.leftX) / 2,
+  y: shape.topY + Math.abs(shape.bottomY - shape.topY) / 2,
+})
+
+const getShapeDimensions = (shape: Shape) => ({
+  width: Math.abs(shape.rightX - shape.leftX),
+  height: Math.abs(shape.bottomY - shape.topY),
+})
+
+const getCornerSigns = (corner: number) => {
+  switch (corner) {
+    case 0:
+      return { x: -1, y: -1 }
+    case 1:
+      return { x: 1, y: -1 }
+    case 2:
+      return { x: -1, y: 1 }
+    default:
+      return { x: 1, y: 1 }
+  }
+}
+
+const getCornerIndexFromSigns = (x: number, y: number) => {
+  if (x < 0 && y < 0) return 0
+  if (x >= 0 && y < 0) return 1
+  if (x < 0 && y >= 0) return 2
+  return 3
+}
+
+const getShapeCornerPoint = (shape: Shape, corner: number): Point => {
+  const { width, height } = getShapeDimensions(shape)
+  const center = getShapeCenter(shape)
+  const radians = parseShapeRotation(shape.rotate)
+  const signs = getCornerSigns(corner)
+  const cornerOffset = rotatePoint({ x: (width / 2) * signs.x, y: (height / 2) * signs.y }, radians)
+
+  return {
+    x: center.x + cornerOffset.x,
+    y: center.y + cornerOffset.y,
+  }
+}
+
 export default component$(() => {
   useStylesScoped$(styles)
 
@@ -151,38 +212,38 @@ export default component$(() => {
     shape.bottomY += yDiff
   })
 
-  const moveShapeCorner = $(async (xDiff: number, yDiff: number, shape: Shape, corner: number) => {
+  const moveShapeCorner = $((pointerX: number, pointerY: number, shape: Shape, corner: number) => {
     if (!state.resizeMouseDownCoords) return
 
-    let { leftX, topY, rightX, bottomY } = shape
+    const radians = parseShapeRotation(shape.rotate)
+    const fixedCorner = getShapeCornerPoint(shape, 3 - corner)
+    const localVector = rotatePoint({ x: pointerX - fixedCorner.x, y: pointerY - fixedCorner.y }, -radians)
+    const previousSigns = getCornerSigns(corner)
 
-    if (corner === 0) {
-      leftX += xDiff
-      topY += yDiff
-      if (leftX > rightX) state.resizeMouseDownCoords.corner = 1
-      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 2
-    } else if (corner === 1) {
-      rightX += xDiff
-      topY += yDiff
-      if (leftX > rightX) state.resizeMouseDownCoords.corner = 0
-      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 3
-    } else if (corner === 2) {
-      leftX += xDiff
-      bottomY += yDiff
-      if (leftX > rightX) state.resizeMouseDownCoords.corner = 3
-      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 0
-    } else if (corner === 3) {
-      rightX += xDiff
-      bottomY += yDiff
-      if (leftX > rightX) state.resizeMouseDownCoords.corner = 2
-      else if (topY > bottomY) state.resizeMouseDownCoords.corner = 1
+    const normalizedVector = {
+      x:
+        Math.abs(localVector.x) < MIN_SHAPE_SIZE
+          ? previousSigns.x * MIN_SHAPE_SIZE
+          : localVector.x,
+      y:
+        Math.abs(localVector.y) < MIN_SHAPE_SIZE
+          ? previousSigns.y * MIN_SHAPE_SIZE
+          : localVector.y,
     }
 
-    const correctedCoords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
-    shape.leftX = correctedCoords.leftX
-    shape.topY = correctedCoords.topY
-    shape.rightX = correctedCoords.rightX
-    shape.bottomY = correctedCoords.bottomY
+    const centerOffset = rotatePoint({ x: normalizedVector.x / 2, y: normalizedVector.y / 2 }, radians)
+    const center = {
+      x: fixedCorner.x + centerOffset.x,
+      y: fixedCorner.y + centerOffset.y,
+    }
+    const width = Math.abs(normalizedVector.x)
+    const height = Math.abs(normalizedVector.y)
+
+    shape.leftX = center.x - width / 2
+    shape.topY = center.y - height / 2
+    shape.rightX = center.x + width / 2
+    shape.bottomY = center.y + height / 2
+    state.resizeMouseDownCoords.corner = getCornerIndexFromSigns(normalizedVector.x, normalizedVector.y)
   })
 
   const drawShape = $(async (props: DrawShapeInput) => {
@@ -281,9 +342,9 @@ export default component$(() => {
     if (state.resizeMouseDownCoords) {
       if (!state.selectedShape) return
 
-      const { clientX: startX, clientY: startY, corner } = state.resizeMouseDownCoords
-      const { xDiff, yDiff } = await getScreenCoordDiff(startX, startY)
-      moveShapeCorner(xDiff, yDiff, state.selectedShape, corner)
+      const { corner } = state.resizeMouseDownCoords
+      const { canvasX, canvasY } = await screenToCanvas(clientX, clientY)
+      moveShapeCorner(canvasX, canvasY, state.selectedShape, corner)
       state.resizeMouseDownCoords.clientX = clientX
       state.resizeMouseDownCoords.clientY = clientY
     }
