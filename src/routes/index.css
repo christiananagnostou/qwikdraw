@@ -30,11 +30,16 @@
 .selected-shape__range {
   -webkit-appearance: none;
   appearance: none;
+  background: transparent;
 }
 
 .selected-shape__range--vertical {
-  min-width: 132px;
-  transform: rotate(-90deg);
+  -webkit-appearance: slider-vertical;
+  appearance: slider-vertical;
+  writing-mode: vertical-lr;
+  direction: rtl;
+  width: 18px;
+  height: 152px;
 }
 
 .selected-shape__range::-webkit-slider-thumb {
@@ -46,7 +51,13 @@
   transition: all 0.25s ease;
 }
 
+.selected-shape__range::-webkit-slider-runnable-track {
+  width: 12px;
+  border-radius: 9999px;
+  background-color: rgb(71, 85, 105);
+}
+
 .selected-shape__range:hover::-webkit-slider-thumb {
-  transform: scale(2);
+  transform: scale(1.2);
   background-color: rgb(220, 220, 240);
 }

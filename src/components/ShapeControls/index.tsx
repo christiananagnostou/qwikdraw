@@ -13,18 +13,18 @@ export default component$<Props>(({ selectedShape }) => {
 
   return (
     <div class="absolute bottom-16 left-4 z-10 text-white">
-      <div class="rounded-2xl border border-slate-700/80 bg-stone-900/95 px-3 py-4 shadow-lg backdrop-blur">
-        <div class="flex h-48 flex-col items-center justify-between">
+      <div class="rounded-[2rem] border border-slate-700/80 bg-stone-900/95 px-3 py-3 shadow-lg backdrop-blur">
+        <div class="flex h-56 w-14 flex-col items-center justify-between">
           <output class="min-w-[3rem] rounded-full bg-stone-800 px-2 py-1 text-center text-[11px] text-slate-300">
             {borderRadius.toFixed(0)}%
           </output>
 
-          <div class="flex flex-1 items-center justify-center py-2">
+          <div class="flex flex-1 items-center justify-center py-3">
             <input
               aria-label="Border radius"
-              class="selected-shape__range selected-shape__range--vertical cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
+              class="selected-shape__range selected-shape__range--vertical cursor-ns-resize outline-none appearance-none"
               onMouseDown$={(e) => e.stopPropagation()}
-              style={{ '--slider-width': '10px' }}
+              style={{ '--slider-width': '18px' }}
               type="range"
               min="0"
               max="50"
