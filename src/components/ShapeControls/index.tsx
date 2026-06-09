@@ -1,4 +1,4 @@
-import { component$ } from '@builder.io/qwik'
+import { $, component$, useOnDocument, useSignal, useStore, useStylesScoped$ } from '@builder.io/qwik'
 
 import type { Shape } from '~/routes'
 
@@ -6,10 +6,82 @@ interface Props {
   selectedShape?: Shape
 }
 
+const styles = `
+  .shape-controls__slider-slot {
+    width: 1.5rem;
+    height: 9.5rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.125rem 0;
+  }
+
+  .shape-controls__slider-track {
+    position: relative;
+    width: 0.875rem;
+    height: 100%;
+    border-radius: 9999px;
+    background-color: rgb(71, 85, 105);
+    overflow: visible;
+  }
+
+  .shape-controls__slider-fill {
+    position: absolute;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 9999px;
+    background: linear-gradient(180deg, rgb(148, 163, 184), rgb(100, 116, 139));
+  }
+
+  .shape-controls__slider-thumb {
+    position: absolute;
+    left: 50%;
+    width: 1.125rem;
+    height: 1.125rem;
+    transform: translateX(-50%);
+    border-radius: 9999px;
+    background-color: rgb(245, 245, 244);
+    border: 2px solid rgb(161, 161, 170);
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.35);
+  }
+`
+
 export default component$<Props>(({ selectedShape }) => {
+  useStylesScoped$(styles)
+
   if (!selectedShape || selectedShape.type !== 'rectangle') return <span />
 
+  const sliderRef = useSignal<HTMLDivElement>()
+  const state = useStore({ dragging: false })
   const borderRadius = parseFloat(selectedShape.borderRadius) || 0
+  const fillPercent = Math.max(0, Math.min(100, (borderRadius / 50) * 100))
+
+  const updateBorderRadius = $((clientY: number) => {
+    const slider = sliderRef.value
+    if (!slider) return
+
+    const rect = slider.getBoundingClientRect()
+    const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+    const nextValue = Math.round(ratio * 100) / 2
+
+    selectedShape.borderRadius = `${nextValue}%`
+  })
+
+  useOnDocument(
+    'mousemove',
+    $((event) => {
+      if (!state.dragging) return
+      updateBorderRadius((event as MouseEvent).clientY)
+    })
+  )
+
+  useOnDocument(
+    'mouseup',
+    $(() => {
+      state.dragging = false
+    })
+  )
 
   return (
     <div class="absolute bottom-16 left-4 z-10 text-white">
@@ -20,21 +92,25 @@ export default component$<Props>(({ selectedShape }) => {
           </output>
 
           <div class="flex flex-1 items-center justify-center py-3">
-            <div class="shape-controls__slider-slot">
-              <input
-                aria-label="Border radius"
-                class="selected-shape__range selected-shape__range--vertical cursor-ns-resize outline-none appearance-none"
-                onMouseDown$={(e) => e.stopPropagation()}
-                style={{ '--slider-width': '18px' }}
-                type="range"
-                min="0"
-                max="50"
-                step="0.5"
-                value={borderRadius}
-                onInput$={(e) => {
-                  selectedShape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
-                }}
-              />
+            <div
+              ref={sliderRef}
+              aria-label="Border radius"
+              aria-valuemax={50}
+              aria-valuemin={0}
+              aria-valuenow={borderRadius}
+              role="slider"
+              tabIndex={0}
+              class="shape-controls__slider-slot cursor-ns-resize"
+              onMouseDown$={(e) => {
+                e.stopPropagation()
+                state.dragging = true
+                updateBorderRadius(e.clientY)
+              }}
+            >
+              <div class="shape-controls__slider-track">
+                <div class="shape-controls__slider-fill" style={{ height: `${fillPercent}%` }} />
+                <div class="shape-controls__slider-thumb" style={{ bottom: `calc(${fillPercent}% - 9px)` }} />
+              </div>
             </div>
           </div>
 

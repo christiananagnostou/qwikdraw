@@ -15,10 +15,11 @@ test('shape controls rail only appears for a selected rectangle', async ({ page 
   await page.mouse.move(canvasBox.x + 320, canvasBox.y + 280)
   await page.mouse.up()
 
-  await expect(page.getByLabel('Border radius')).toBeVisible()
+  await expect(page.getByRole('slider', { name: 'Border radius' })).toHaveCount(1)
+  await expect(page.locator('.shape-controls__slider-track')).toBeVisible()
 
   await page.mouse.click(canvasBox.x + 500, canvasBox.y + 320)
-  await expect(page.getByLabel('Border radius')).toHaveCount(0)
+  await expect(page.getByRole('slider', { name: 'Border radius' })).toHaveCount(0)
 
   await page.keyboard.press('c')
   await page.mouse.move(canvasBox.x + 200, canvasBox.y + 180)
@@ -26,5 +27,5 @@ test('shape controls rail only appears for a selected rectangle', async ({ page 
   await page.mouse.move(canvasBox.x + 320, canvasBox.y + 300)
   await page.mouse.up()
 
-  await expect(page.getByLabel('Border radius')).toHaveCount(0)
+  await expect(page.getByRole('slider', { name: 'Border radius' })).toHaveCount(0)
 })
