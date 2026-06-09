@@ -344,15 +344,10 @@ export default component$(() => {
       state.zoomPos.y += clientY - (state.canvasMouseMoveCoords?.clientY || clientY)
     }
 
-    const getScreenCoordDiff = async (startX: number, startY: number) => {
-      const { screenX: startClientX, screenY: startClientY } = await canvasToScreen(startX, startY)
-      const { screenX: endClientX, screenY: endClientY } = await canvasToScreen(clientX, clientY)
-      return { xDiff: endClientX - startClientX, yDiff: endClientY - startClientY }
-    }
-
     if (state.keyDown === 'Shift' && state.shapeMouseDownCoords && state.selectedShape) {
       const { clientX: startX, clientY: startY } = state.shapeMouseDownCoords
-      const { xDiff, yDiff } = await getScreenCoordDiff(startX, startY)
+      const xDiff = (clientX - startX) / state.scale
+      const yDiff = (clientY - startY) / state.scale
       moveShape(state.selectedShape, xDiff, yDiff)
       state.shapeMouseDownCoords = { clientX, clientY }
     }

@@ -14,6 +14,12 @@ import { Rectangle } from '../icons/retangle'
 import { Shift } from '../icons/shift'
 import { Undo } from '../icons/undo'
 
+const chromeButtonClass =
+  'border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100'
+const iconButtonClass = `h-8 w-8 grid place-items-center ${chromeButtonClass}`
+const textButtonClass = `h-8 px-4 text-xs ${chromeButtonClass}`
+const shapeButtonClass = `h-8 px-4 text-xs ${chromeButtonClass} relative group`
+
 const keyboardCommands = [
   { key: '⇧ Click', command: 'Move' },
   { key: 'F Click', command: 'Bring to Front' },
@@ -25,6 +31,11 @@ const keyboardCommands = [
   { key: 'c', command: 'Circle' },
   { key: 'r', command: 'Rectangle' },
   { key: 'i', command: 'Image' },
+] as const
+
+const shapeButtons = [
+  { icon: <Rectangle />, shape: 'rectangle' as ShapeType, shortcut: 'r' },
+  { icon: <Circle />, shape: 'circle' as ShapeType, shortcut: 'c' },
 ] as const
 
 interface Props {
@@ -90,6 +101,13 @@ export default component$(
       file ? reader.readAsDataURL(file) : handleErr()
     })
 
+    const renderShortcutKey = (key: string) => {
+      if (key === '⇧') return <Shift />
+      if (key === '⌘') return <Command />
+      if (key === '⌫') return <Backspace />
+      return key
+    }
+
     return (
       <>
         <div class="absolute top-4 left-4 z-10">
@@ -97,41 +115,26 @@ export default component$(
         </div>
 
         <div class="flex gap-1 text-lg text-white absolute bottom-4 left-4 z-10">
-          <button
-            onClick$={onUndo}
-            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
-          >
+          <button onClick$={onUndo} class={iconButtonClass}>
             <Undo />
           </button>
 
-          <button
-            onClick$={onRedo}
-            class="h-8 w-8 grid place-items-center border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
-          >
+          <button onClick$={onRedo} class={iconButtonClass}>
             <Redo />
           </button>
 
-          <button
-            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
-            onClick$={onClear}
-          >
+          <button class={textButtonClass} onClick$={onClear}>
             Clear
           </button>
 
-          <button
-            class="h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100"
-            onClick$={onResetZoom}
-          >
+          <button class={textButtonClass} onClick$={onResetZoom}>
             {(state.scale * 100).toFixed(0)}%
           </button>
 
-          {[
-            { icon: <Rectangle />, shape: 'rectangle' as ShapeType, shortcut: 'r' },
-            { icon: <Circle />, shape: 'circle' as ShapeType, shortcut: 'c' },
-          ].map(({ icon, shape, shortcut }) => (
+          {shapeButtons.map(({ icon, shape, shortcut }) => (
             <button
               key={shape}
-              class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 transition duration-100 ${
+              class={`${shapeButtonClass} ${
                 state.currShapeType === shape ? '!bg-slate-700' : ''
               }`}
               onClick$={() => onSelectShapeType(shape)}
@@ -142,7 +145,7 @@ export default component$(
           ))}
 
           <div
-            class={`h-8 px-4 text-xs border border-slate-700 bg-stone-900 rounded relative group hover:bg-stone-800 grid place-items-center ${
+            class={`${shapeButtonClass} grid place-items-center ${
               state.currShapeType === 'image' ? 'bg-stone-800' : ''
             }`}
           >
@@ -177,12 +180,7 @@ export default component$(
                           key={`${shortcut.command}-${key}`}
                           class="ml-1 text-[10px] text-xs leading-[110%] py-[4px] px-[3px] min-w-[20px] inline-grid place-items-center text-center rounded bg-stone-700"
                         >
-                          {(() => {
-                            if (key === '⇧') return <Shift />
-                            if (key === '⌘') return <Command />
-                            if (key === '⌫') return <Backspace />
-                            return key
-                          })()}
+                          {renderShortcutKey(key)}
                         </kbd>
                       ))}
                     </span>
