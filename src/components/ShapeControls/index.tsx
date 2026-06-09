@@ -1,4 +1,4 @@
-import { $, component$, useOnWindow, useSignal, useStore, useStylesScoped$ } from '@builder.io/qwik'
+import { $, component$, useSignal, useStore, useStylesScoped$, useVisibleTask$ } from '@builder.io/qwik'
 
 import type { Shape } from '~/routes'
 
@@ -57,6 +57,10 @@ export default component$<Props>(({ selectedShape }) => {
   const borderRadius = parseFloat(selectedShape.borderRadius) || 0
   const fillPercent = Math.max(0, Math.min(100, (borderRadius / 50) * 100))
 
+  const stopDragging = $(() => {
+    state.dragging = false
+  })
+
   const updateBorderRadius = $((clientY: number) => {
     const slider = sliderRef.value
     if (!slider) return
@@ -68,20 +72,31 @@ export default component$<Props>(({ selectedShape }) => {
     selectedShape.borderRadius = `${nextValue}%`
   })
 
-  useOnWindow(
-    'mousemove',
-    $((event) => {
-      if (!state.dragging) return
-      updateBorderRadius((event as MouseEvent).clientY)
-    })
-  )
+  useVisibleTask$(({ cleanup }) => {
+    const handleMouseMove = (event: MouseEvent) => {
+      if (event.buttons === 0) {
+        state.dragging = false
+        return
+      }
 
-  useOnWindow(
-    'mouseup',
-    $(() => {
+      if (!state.dragging) return
+      updateBorderRadius(event.clientY)
+    }
+
+    const handleStopDragging = () => {
       state.dragging = false
+    }
+
+    window.addEventListener('mousemove', handleMouseMove)
+    window.addEventListener('mouseup', handleStopDragging)
+    window.addEventListener('blur', handleStopDragging)
+
+    cleanup(() => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', handleStopDragging)
+      window.removeEventListener('blur', handleStopDragging)
     })
-  )
+  })
 
   return (
     <div class="absolute bottom-16 left-4 z-10 text-white">
@@ -107,10 +122,8 @@ export default component$<Props>(({ selectedShape }) => {
                 state.dragging = true
                 updateBorderRadius(e.clientY)
               }}
-              onMouseMove$={(e) => {
-                if (!state.dragging) return
-                updateBorderRadius(e.clientY)
-              }}
+              onMouseUp$={stopDragging}
+              onMouseLeave$={stopDragging}
             >
               <div class="shape-controls__slider-track">
                 <div class="shape-controls__slider-fill" style={{ height: `${fillPercent}%` }} />
