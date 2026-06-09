@@ -16,14 +16,21 @@
 
 .selected-shape__resize-handle {
   color: rgba(255, 255, 255, 0.95);
-  cursor: pointer;
+  cursor: none;
 }
 
 .selected-shape__resize-handle-icon {
   width: 130%;
   height: 130%;
   filter: drop-shadow(0 0 2px rgba(0, 0, 0, 0.8));
+  opacity: 0;
   pointer-events: none;
+  transition: opacity 120ms ease;
+}
+
+.selected-shape__resize-handle:hover .selected-shape__resize-handle-icon,
+.selected-shape__resize-handle:active .selected-shape__resize-handle-icon {
+  opacity: 1;
 }
 
 /* Selected Shape Input Range */
