@@ -4,6 +4,7 @@ import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
 
 import Controls from '~/components/Controls'
+import ShapeControls from '~/components/ShapeControls'
 
 import styles from './index.css?inline'
 
@@ -561,6 +562,7 @@ export default component$(() => {
         drawShape={drawShape}
         screenToCanvas={screenToCanvas}
       />
+      <ShapeControls selectedShape={state.selectedShape} />
 
       <div
         class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute inset-0 z-0 touch-pan-y touch-pan-x select-none"
@@ -583,7 +585,6 @@ export default component$(() => {
             const isSelected = state.selectedShape?.id === shape.id
             const height = Math.abs(shape.bottomY - shape.topY || 1)
             const width = Math.abs(shape.rightX - shape.leftX || 1)
-            const showBorderRadiusControl = shape.type !== 'triangle' && shape.type !== 'image'
 
             return (
               <span
@@ -645,38 +646,6 @@ export default component$(() => {
                           }}
                         />
                       ))}
-
-                      {showBorderRadiusControl && (
-                        <div
-                          class="absolute top-0 bottom-0 m-auto w-2 h-fit transition-opacity"
-                          style={{
-                            '--slider-width': '8px',
-                            '--slider-height': `clamp(50px, ${height / 2}px, ${(130 + height / 4) * state.scale}px)`,
-                            left: `calc(100% + calc(.75rem * ${1 / state.scale}))`,
-                            scale: `${1 / state.scale}`,
-                            opacity: state.rotateMouseDownCoords ? '0' : '1',
-                          }}
-                        >
-                          <div class="flex justify-center items-center rotate-90 -mb-4">
-                            <input
-                              style={{ minWidth: 'var(--slider-height)' }}
-                              class="selected-shape__range cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
-                              onMouseDown$={(e) => e.stopPropagation()}
-                              type="range"
-                              min="0"
-                              max="50"
-                              step="0.5"
-                              value={parseInt(shape.borderRadius)}
-                              onInput$={(e) => {
-                                shape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
-                              }}
-                            />
-                            <output class="text-gray-400 w-4 text-[.65rem] flex items-center justify-between -rotate-90">
-                              {shape.borderRadius}
-                            </output>
-                          </div>
-                        </div>
-                      )}
 
                       <div
                         class="slider absolute left-full bottom-full text-gray-500 cursor-grab active:cursor-grabbing"

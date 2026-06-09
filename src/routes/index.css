@@ -32,6 +32,11 @@
   appearance: none;
 }
 
+.selected-shape__range--vertical {
+  min-width: 132px;
+  transform: rotate(-90deg);
+}
+
 .selected-shape__range::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: var(--slider-width);
