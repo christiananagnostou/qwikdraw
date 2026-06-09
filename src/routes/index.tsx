@@ -122,6 +122,24 @@ const getShapeCornerPoint = (shape: Shape, corner: number): Point => {
   }
 }
 
+const getResizeCursor = (corner: number, rotate: string) => {
+  const baseAngle = corner === 0 || corner === 3 ? 45 : 135
+  const rotationDegrees = (parseShapeRotation(rotate) * 180) / Math.PI
+  const normalizedAngle = ((baseAngle + rotationDegrees) % 180 + 180) % 180
+  const snappedAngle = Math.round(normalizedAngle / 45) * 45
+
+  switch (snappedAngle % 180) {
+    case 0:
+      return 'ew-resize'
+    case 45:
+      return 'nwse-resize'
+    case 90:
+      return 'ns-resize'
+    default:
+      return 'nesw-resize'
+  }
+}
+
 export default component$(() => {
   useStylesScoped$(styles)
 
@@ -599,10 +617,10 @@ export default component$(() => {
                       <span class="h-full w-full absolute" style={{ border: `${1 / state.scale}px solid white` }} />
 
                       {[
-                        { top: dotPos, left: dotPos, cursor: 'nwse-resize' },
-                        { top: dotPos, right: dotPos, cursor: 'nesw-resize' },
-                        { bottom: dotPos, left: dotPos, cursor: 'nesw-resize' },
-                        { bottom: dotPos, right: dotPos, cursor: 'nwse-resize' },
+                        { top: dotPos, left: dotPos },
+                        { top: dotPos, right: dotPos },
+                        { bottom: dotPos, left: dotPos },
+                        { bottom: dotPos, right: dotPos },
                       ].map((dotLocation, i) => (
                         <span
                           key={i}
@@ -611,6 +629,7 @@ export default component$(() => {
                           style={{
                             height: `${dotSize / state.scale}px`,
                             width: `${dotSize / state.scale}px`,
+                            cursor: getResizeCursor(i, shape.rotate),
                             ...dotLocation,
                           }}
                         />
