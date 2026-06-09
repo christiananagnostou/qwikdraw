@@ -140,6 +140,8 @@ const getResizeCursor = (corner: number, rotate: string) => {
   }
 }
 
+const getShapeFillClass = (shapeType: ShapeType) => `shape__fill ${shapeType === 'triangle' ? 'shape__fill--triangle' : ''}`
+
 export default component$(() => {
   useStylesScoped$(styles)
 
@@ -417,7 +419,7 @@ export default component$(() => {
     handleCanvasRelease(clientX, clientY)
   })
 
-  const previewStyle = useResource$<Record<string, string> | undefined>(async ({ track }) => {
+  const previewShape = useResource$<{ style: Record<string, string>; type: ShapeType } | undefined>(async ({ track }) => {
     const canvasMouseDownCoords = track(() => state.canvasMouseDownCoords)
     const canvasMouseMoveCoords = track(() => state.canvasMouseMoveCoords)
 
@@ -434,12 +436,15 @@ export default component$(() => {
     const coords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
 
     return {
-      '--left': `${coords.leftX}px`,
-      '--top': `${coords.topY}px`,
-      '--height': `${Math.abs(coords.bottomY - coords.topY)}px`,
-      '--width': `${Math.abs(coords.rightX - coords.leftX)}px`,
-      '--background': state.selectedColor,
-      '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+      type: state.currShapeType,
+      style: {
+        '--left': `${coords.leftX}px`,
+        '--top': `${coords.topY}px`,
+        '--height': `${Math.abs(coords.bottomY - coords.topY)}px`,
+        '--width': `${Math.abs(coords.rightX - coords.leftX)}px`,
+        '--background': state.currShapeType === 'triangle' ? 'transparent' : state.selectedColor,
+        '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+      },
     }
   })
 
@@ -578,6 +583,7 @@ export default component$(() => {
             const isSelected = state.selectedShape?.id === shape.id
             const height = Math.abs(shape.bottomY - shape.topY || 1)
             const width = Math.abs(shape.rightX - shape.leftX || 1)
+            const showBorderRadiusControl = shape.type !== 'triangle' && shape.type !== 'image'
 
             return (
               <span
@@ -595,10 +601,20 @@ export default component$(() => {
                   '--width': `${width}px`,
                   '--border-radius': shape.borderRadius,
                   '--rotate': shape.rotate,
-                  '--background': shape.fillColor,
+                  '--background': shape.type === 'triangle' || shape.type === 'image' ? 'transparent' : shape.fillColor,
                 }}
               >
                 <div class="h-full w-full relative">
+                  {shape.type !== 'image' && (
+                    <div
+                      class={getShapeFillClass(shape.type)}
+                      style={{
+                        '--background': shape.fillColor,
+                        '--border-radius': shape.borderRadius,
+                      }}
+                    />
+                  )}
+
                   {shape.type === 'image' && (
                     <img
                       src={shape.src}
@@ -630,35 +646,37 @@ export default component$(() => {
                         />
                       ))}
 
-                      <div
-                        class="absolute top-0 bottom-0 m-auto w-2 h-fit transition-opacity"
-                        style={{
-                          '--slider-width': '8px',
-                          '--slider-height': `clamp(50px, ${height / 2}px, ${(130 + height / 4) * state.scale}px)`,
-                          left: `calc(100% + calc(.75rem * ${1 / state.scale}))`,
-                          scale: `${1 / state.scale}`,
-                          opacity: state.rotateMouseDownCoords ? '0' : '1',
-                        }}
-                      >
-                        <div class="flex justify-center items-center rotate-90 -mb-4">
-                          <input
-                            style={{ minWidth: 'var(--slider-height)' }}
-                            class="selected-shape__range cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
-                            onMouseDown$={(e) => e.stopPropagation()}
-                            type="range"
-                            min="0"
-                            max="50"
-                            step="0.5"
-                            value={parseInt(shape.borderRadius)}
-                            onInput$={(e) => {
-                              shape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
-                            }}
-                          />
-                          <output class="text-gray-400 w-4 text-[.65rem] flex items-center justify-between -rotate-90">
-                            {shape.borderRadius}
-                          </output>
+                      {showBorderRadiusControl && (
+                        <div
+                          class="absolute top-0 bottom-0 m-auto w-2 h-fit transition-opacity"
+                          style={{
+                            '--slider-width': '8px',
+                            '--slider-height': `clamp(50px, ${height / 2}px, ${(130 + height / 4) * state.scale}px)`,
+                            left: `calc(100% + calc(.75rem * ${1 / state.scale}))`,
+                            scale: `${1 / state.scale}`,
+                            opacity: state.rotateMouseDownCoords ? '0' : '1',
+                          }}
+                        >
+                          <div class="flex justify-center items-center rotate-90 -mb-4">
+                            <input
+                              style={{ minWidth: 'var(--slider-height)' }}
+                              class="selected-shape__range cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
+                              onMouseDown$={(e) => e.stopPropagation()}
+                              type="range"
+                              min="0"
+                              max="50"
+                              step="0.5"
+                              value={parseInt(shape.borderRadius)}
+                              onInput$={(e) => {
+                                shape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
+                              }}
+                            />
+                            <output class="text-gray-400 w-4 text-[.65rem] flex items-center justify-between -rotate-90">
+                              {shape.borderRadius}
+                            </output>
+                          </div>
                         </div>
-                      </div>
+                      )}
 
                       <div
                         class="slider absolute left-full bottom-full text-gray-500 cursor-grab active:cursor-grabbing"
@@ -700,8 +718,22 @@ export default component$(() => {
           })}
 
           <Resource
-            value={previewStyle}
-            onResolved={(styles) => (styles ? <span class="shape absolute" style={styles} /> : <span />)}
+            value={previewShape}
+            onResolved={(preview) =>
+              preview ? (
+                <span class="shape absolute" style={preview.style}>
+                  <div
+                    class={getShapeFillClass(preview.type)}
+                    style={{
+                      '--background': state.selectedColor,
+                      '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+                    }}
+                  />
+                </span>
+              ) : (
+                <span />
+              )
+            }
           />
         </div>
       </div>

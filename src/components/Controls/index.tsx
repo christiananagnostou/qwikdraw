@@ -12,6 +12,7 @@ import { Keyboard } from '../icons/keyboard'
 import { Redo } from '../icons/redo'
 import { Rectangle } from '../icons/retangle'
 import { Shift } from '../icons/shift'
+import { Triangle } from '../icons/triangle'
 import { Undo } from '../icons/undo'
 
 const chromeButtonClass =
@@ -30,12 +31,14 @@ const keyboardCommands = [
   { key: '⌫', command: 'Delete' },
   { key: 'c', command: 'Circle' },
   { key: 'r', command: 'Rectangle' },
+  { key: 't', command: 'Triangle' },
   { key: 'i', command: 'Image' },
 ] as const
 
 const shapeButtons = [
   { icon: <Rectangle />, shape: 'rectangle' as ShapeType, shortcut: 'r' },
   { icon: <Circle />, shape: 'circle' as ShapeType, shortcut: 'c' },
+  { icon: <Triangle />, shape: 'triangle' as ShapeType, shortcut: 't' },
 ] as const
 
 interface Props {
