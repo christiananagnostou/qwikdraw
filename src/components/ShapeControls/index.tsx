@@ -1,4 +1,4 @@
-import { $, component$, useSignal, useStore, useStylesScoped$, useVisibleTask$ } from '@builder.io/qwik'
+import { component$, useSignal, useStylesScoped$, useVisibleTask$ } from '@builder.io/qwik'
 
 import type { Shape } from '~/routes'
 
@@ -53,48 +53,58 @@ export default component$<Props>(({ selectedShape }) => {
   if (!selectedShape || selectedShape.type !== 'rectangle') return <span />
 
   const sliderRef = useSignal<HTMLDivElement>()
-  const state = useStore({ dragging: false })
   const borderRadius = parseFloat(selectedShape.borderRadius) || 0
   const fillPercent = Math.max(0, Math.min(100, (borderRadius / 50) * 100))
 
-  const stopDragging = $(() => {
-    state.dragging = false
-  })
-
-  const updateBorderRadius = $((clientY: number) => {
+  useVisibleTask$(({ cleanup }) => {
     const slider = sliderRef.value
     if (!slider) return
 
-    const rect = slider.getBoundingClientRect()
-    const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
-    const nextValue = Math.round(ratio * 100) / 2
+    let dragging = false
 
-    selectedShape.borderRadius = `${nextValue}%`
-  })
+    const updateBorderRadius = (clientY: number) => {
+      const rect = slider.getBoundingClientRect()
+      const ratio = 1 - Math.max(0, Math.min(1, (clientY - rect.top) / rect.height))
+      const nextValue = Math.round(ratio * 100) / 2
 
-  useVisibleTask$(({ cleanup }) => {
+      selectedShape.borderRadius = `${nextValue}%`
+    }
+
+    const stopDragging = () => {
+      dragging = false
+      window.removeEventListener('mousemove', handleMouseMove)
+      window.removeEventListener('mouseup', stopDragging)
+      window.removeEventListener('blur', stopDragging)
+    }
+
     const handleMouseMove = (event: MouseEvent) => {
+      if (!dragging) return
+
       if (event.buttons === 0) {
-        state.dragging = false
+        stopDragging()
         return
       }
 
-      if (!state.dragging) return
       updateBorderRadius(event.clientY)
     }
 
-    const handleStopDragging = () => {
-      state.dragging = false
+    const handleMouseDown = (event: MouseEvent) => {
+      event.preventDefault()
+      event.stopPropagation()
+
+      dragging = true
+      updateBorderRadius(event.clientY)
+
+      window.addEventListener('mousemove', handleMouseMove)
+      window.addEventListener('mouseup', stopDragging)
+      window.addEventListener('blur', stopDragging)
     }
 
-    window.addEventListener('mousemove', handleMouseMove)
-    window.addEventListener('mouseup', handleStopDragging)
-    window.addEventListener('blur', handleStopDragging)
+    slider.addEventListener('mousedown', handleMouseDown)
 
     cleanup(() => {
-      window.removeEventListener('mousemove', handleMouseMove)
-      window.removeEventListener('mouseup', handleStopDragging)
-      window.removeEventListener('blur', handleStopDragging)
+      slider.removeEventListener('mousedown', handleMouseDown)
+      stopDragging()
     })
   })
 
@@ -116,14 +126,6 @@ export default component$<Props>(({ selectedShape }) => {
               role="slider"
               tabIndex={0}
               class="shape-controls__slider-slot cursor-ns-resize"
-              preventdefault:mousedown
-              onMouseDown$={(e) => {
-                e.stopPropagation()
-                state.dragging = true
-                updateBorderRadius(e.clientY)
-              }}
-              onMouseUp$={stopDragging}
-              onMouseLeave$={stopDragging}
             >
               <div class="shape-controls__slider-track">
                 <div class="shape-controls__slider-fill" style={{ height: `${fillPercent}%` }} />
