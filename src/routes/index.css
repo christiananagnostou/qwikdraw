@@ -24,3 +24,36 @@
 .shape__fill--triangle {
   clip-path: polygon(50% 0%, 0% 100%, 100% 100%);
 }
+
+.shape__selection {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  border: calc(1px / var(--shape-scale, 1)) solid rgb(255 255 255 / 0.92);
+  border-radius: var(--border-radius);
+  box-shadow: 0 0 0 calc(1px / var(--shape-scale, 1)) rgb(0 0 0 / 0.35);
+}
+
+.shape__selection--circle {
+  border-radius: 50%;
+}
+
+.shape__selection--triangle {
+  border: none;
+  box-shadow: none;
+  background: transparent;
+  overflow: visible;
+}
+
+.shape__selection-outline {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: none;
+  stroke: rgb(255 255 255 / 0.92);
+  stroke-width: calc(2px / var(--shape-scale, 1));
+  stroke-linejoin: round;
+  filter: drop-shadow(0 0 calc(1px / var(--shape-scale, 1)) rgb(0 0 0 / 0.45));
+}

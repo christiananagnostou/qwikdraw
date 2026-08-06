@@ -168,10 +168,13 @@ export default component$<Props>(({ selectedColor, setSelectedColor }) => {
   return (
     <div class="flex flex-col gap-1">
       <button
+        type="button"
         style={{ background: selectedColor }}
         onClick$={() => (state.showColorPicker = !state.showColorPicker)}
-        class="h-8 w-8 rounded"
+        class="h-9 w-9 rounded-lg border border-white/10 shadow-md shadow-black/30 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400"
         title="Pick a color"
+        aria-label="Pick a color"
+        aria-expanded={state.showColorPicker}
       />
 
       {state.showColorPicker && (

@@ -60,6 +60,7 @@ export interface State {
   shiftKey: boolean
   altKey: boolean
   showKeyShortcuts: boolean
+  suppressCanvasClick: boolean
 }
 
 interface Point {
@@ -174,6 +175,7 @@ export default component$(() => {
       shiftKey: false,
       altKey: false,
       showKeyShortcuts: false,
+      suppressCanvasClick: false,
     },
     { deep: true }
   )
@@ -403,9 +405,14 @@ export default component$(() => {
       const { canvasX: leftX, canvasY: topY } = await screenToCanvas(clientX, clientY)
       const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(releaseX, releaseY)
 
-      if (mouseMoved) await drawShape({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
-      else state.selectedShape = undefined
+      if (mouseMoved) {
+        state.suppressCanvasClick = true
+        await drawShape({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
+      } else {
+        state.selectedShape = undefined
+      }
     } else if (transformedShape) {
+      state.suppressCanvasClick = true
       saveState()
     }
 
@@ -562,14 +569,20 @@ export default component$(() => {
         drawShape={drawShape}
         screenToCanvas={screenToCanvas}
       />
-      <ShapeControls selectedShape={state.selectedShape} />
+      <ShapeControls selectedShape={state.selectedShape} onCommit={saveState} />
 
       <div
         class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute inset-0 z-0 touch-pan-y touch-pan-x select-none"
         onMouseDown$={handleCanvasMouseDown}
         onMouseMove$={handleCanvasMouseMove}
         onMouseUp$={handleCanvasMouseUp}
-        onClick$={() => (state.selectedShape = undefined)}
+        onClick$={() => {
+          if (state.suppressCanvasClick) {
+            state.suppressCanvasClick = false
+            return
+          }
+          state.selectedShape = undefined
+        }}
         preventdefault:mousedown
         preventdefault:mouseup
       >
@@ -626,7 +639,22 @@ export default component$(() => {
 
                   {isSelected && (
                     <>
-                      <span class="h-full w-full absolute" style={{ border: `${1 / state.scale}px solid white` }} />
+                      <span
+                        class={`shape__selection ${
+                          shape.type === 'circle'
+                            ? 'shape__selection--circle'
+                            : shape.type === 'triangle'
+                              ? 'shape__selection--triangle'
+                              : ''
+                        }`}
+                        style={{ '--shape-scale': String(state.scale) }}
+                      >
+                        {shape.type === 'triangle' && (
+                          <svg class="shape__selection-outline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon points="50,2 2,98 98,98" />
+                          </svg>
+                        )}
+                      </span>
 
                       {[
                         { top: dotPos, left: dotPos },
@@ -636,8 +664,10 @@ export default component$(() => {
                       ].map((dotLocation, i) => (
                         <span
                           key={i}
+                          data-resize-handle={i}
+                          aria-hidden="true"
                           onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
-                          class="absolute"
+                          class="absolute rounded-sm bg-white shadow-sm"
                           style={{
                             height: `${dotSize / state.scale}px`,
                             width: `${dotSize / state.scale}px`,
@@ -648,8 +678,11 @@ export default component$(() => {
                       ))}
 
                       <div
-                        class="slider absolute left-full bottom-full text-gray-500 cursor-grab active:cursor-grabbing"
+                        class="slider absolute left-full bottom-full text-slate-400 cursor-grab active:cursor-grabbing"
                         onMouseDown$={(e) => handleShapeRotateMouseDown(e)}
+                        role="button"
+                        aria-label="Rotate shape"
+                        tabIndex={0}
                       >
                         <div class="relative">
                           <svg
@@ -661,6 +694,7 @@ export default component$(() => {
                             height={`${20 / state.scale}px`}
                             width={`${20 / state.scale}px`}
                             xmlns="http://www.w3.org/2000/svg"
+                            aria-hidden="true"
                           >
                             <path d="M236,184a12,12,0,0,1-24,0A84,84,0,0,0,68.6,124.6L53.11,140H88a12,12,0,0,1,0,24H24a12,12,0,0,1-12-12V88a12,12,0,0,1,24,0v35.16l15.66-15.55A108,108,0,0,1,236,184Z"></path>
                           </svg>
@@ -670,12 +704,13 @@ export default component$(() => {
                               opacity: state.rotateMouseDownCoords ? '1' : '0',
                               rotate: `calc(-1 * ${shape.rotate})`,
                             }}
-                            class="absolute left-full bottom-full text-gray-400 w-4 text-[.65rem] flex items-center justify-between cursor-pointer transition-opacity"
+                            class="absolute left-full bottom-full text-slate-300 min-w-[2.5rem] text-xs tabular-nums flex items-center justify-between cursor-pointer transition-opacity"
+                            title="Reset rotation"
                             onClick$={() => (shape.rotate = '0deg')}
                           >
                             {shape.rotate.includes('rad')
-                              ? `${(parseFloat(shape.rotate) * (180 / Math.PI)).toFixed(1)}º`
-                              : `${parseFloat(shape.rotate).toFixed(1)}º`}
+                              ? `${(parseFloat(shape.rotate) * (180 / Math.PI)).toFixed(0)}°`
+                              : `${parseFloat(shape.rotate).toFixed(0)}°`}
                           </span>
                         </div>
                       </div>
