@@ -65,7 +65,7 @@ test('resizing a rotated shape keeps the opposite corner fixed', async ({ page }
 
   const oppositeCornerBefore = await getCornerPoint(shape, 3)
 
-  const topLeftHandle = page.locator('.shape span.absolute').nth(1)
+  const topLeftHandle = page.locator('[data-resize-handle="0"]')
   const handleBox = await topLeftHandle.boundingBox()
   if (!handleBox) throw new Error('Resize handle not rendered')
 

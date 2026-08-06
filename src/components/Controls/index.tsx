@@ -1,4 +1,4 @@
-import { $, component$ } from '@builder.io/qwik'
+import { $, component$, useSignal } from '@builder.io/qwik'
 import type { QRL, QwikChangeEvent } from '@builder.io/qwik'
 
 import type { DrawShapeInput, ShapeType, State } from '~/routes'
@@ -12,13 +12,14 @@ import { Keyboard } from '../icons/keyboard'
 import { Redo } from '../icons/redo'
 import { Rectangle } from '../icons/retangle'
 import { Shift } from '../icons/shift'
+import { Triangle } from '../icons/triangle'
 import { Undo } from '../icons/undo'
 
-const chromeButtonClass =
-  'border border-slate-700 bg-stone-900 rounded hover:bg-stone-800 transition duration-100'
-const iconButtonClass = `h-8 w-8 grid place-items-center ${chromeButtonClass}`
-const textButtonClass = `h-8 px-4 text-xs ${chromeButtonClass}`
-const shapeButtonClass = `h-8 px-4 text-xs ${chromeButtonClass} relative group`
+const chromeSurface =
+  'border border-slate-700/80 bg-stone-900/95 shadow-lg shadow-black/20 backdrop-blur-sm'
+const iconButtonClass = `h-9 w-9 grid place-items-center rounded-lg ${chromeSurface} text-slate-200 hover:bg-stone-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 transition-colors duration-150`
+const textButtonClass = `h-9 px-3 text-xs font-medium tracking-wide rounded-lg ${chromeSurface} text-slate-200 hover:bg-stone-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 transition-colors duration-150`
+const clusterClass = `flex items-center gap-0.5 rounded-xl p-0.5 ${chromeSurface}`
 
 const keyboardCommands = [
   { key: '⇧ Click', command: 'Move' },
@@ -30,13 +31,22 @@ const keyboardCommands = [
   { key: '⌫', command: 'Delete' },
   { key: 'c', command: 'Circle' },
   { key: 'r', command: 'Rectangle' },
+  { key: 't', command: 'Triangle' },
   { key: 'i', command: 'Image' },
 ] as const
 
 const shapeButtons = [
-  { icon: <Rectangle />, shape: 'rectangle' as ShapeType, shortcut: 'r' },
-  { icon: <Circle />, shape: 'circle' as ShapeType, shortcut: 'c' },
+  { icon: <Rectangle />, shape: 'rectangle' as ShapeType, shortcut: 'R', label: 'Rectangle' },
+  { icon: <Circle />, shape: 'circle' as ShapeType, shortcut: 'C', label: 'Circle' },
+  { icon: <Triangle />, shape: 'triangle' as ShapeType, shortcut: 'T', label: 'Triangle' },
 ] as const
+
+const shapeLabels: Record<ShapeType, string> = {
+  rectangle: 'Rectangle',
+  circle: 'Circle',
+  triangle: 'Triangle',
+  image: 'Image',
+}
 
 interface Props {
   state: State
@@ -62,6 +72,9 @@ export default component$(
     drawShape,
     screenToCanvas,
   }: Props) => {
+    const fileInputRef = useSignal<HTMLInputElement>()
+    const clearArmed = useSignal(false)
+
     const handleFileInput = $((e: QwikChangeEvent<HTMLInputElement>) => {
       if (!e.target.files) return
 
@@ -70,7 +83,9 @@ export default component$(
 
       const handleErr = () => {
         state.commandText = 'Error loading file'
-        setTimeout(() => (state.commandText = ''), 2000)
+        setTimeout(() => {
+          if (state.commandText === 'Error loading file') state.commandText = ''
+        }, 2000)
       }
 
       reader.onloadend = () => {
@@ -101,6 +116,27 @@ export default component$(
       file ? reader.readAsDataURL(file) : handleErr()
     })
 
+    const handleClear = $(() => {
+      if (state.shapes.length === 0) return
+
+      if (!clearArmed.value) {
+        clearArmed.value = true
+        state.commandText = 'Click Clear again'
+        setTimeout(() => {
+          clearArmed.value = false
+          if (state.commandText === 'Click Clear again') state.commandText = ''
+        }, 2500)
+        return
+      }
+
+      clearArmed.value = false
+      onClear()
+      state.commandText = 'Cleared · ⌘Z to undo'
+      setTimeout(() => {
+        if (state.commandText === 'Cleared · ⌘Z to undo') state.commandText = ''
+      }, 2500)
+    })
+
     const renderShortcutKey = (key: string) => {
       if (key === '⇧') return <Shift />
       if (key === '⌘') return <Command />
@@ -108,77 +144,152 @@ export default component$(
       return key
     }
 
+    const activeToolLabel = shapeLabels[state.currShapeType]
+    const statusMessage = state.commandText || activeToolLabel
+
     return (
       <>
-        <div class="absolute top-4 left-4 z-10">
-          <ColorPicker selectedColor={state.selectedColor} setSelectedColor={setSelectedColor} />
-        </div>
-
-        <div class="flex gap-1 text-lg text-white absolute bottom-4 left-4 z-10">
-          <button onClick$={onUndo} class={iconButtonClass}>
-            <Undo />
-          </button>
-
-          <button onClick$={onRedo} class={iconButtonClass}>
-            <Redo />
-          </button>
-
-          <button class={textButtonClass} onClick$={onClear}>
-            Clear
-          </button>
-
-          <button class={textButtonClass} onClick$={onResetZoom}>
-            {(state.scale * 100).toFixed(0)}%
-          </button>
-
-          {shapeButtons.map(({ icon, shape, shortcut }) => (
-            <button
-              key={shape}
-              class={`${shapeButtonClass} ${
-                state.currShapeType === shape ? '!bg-slate-700' : ''
-              }`}
-              onClick$={() => onSelectShapeType(shape)}
-            >
-              {icon}
-              <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">{shortcut}</span>
-            </button>
-          ))}
-
+        <div class="pointer-events-none absolute top-4 left-4 z-10 flex items-start gap-2">
+          <div class="pointer-events-auto">
+            <ColorPicker selectedColor={state.selectedColor} setSelectedColor={setSelectedColor} />
+          </div>
           <div
-            class={`${shapeButtonClass} grid place-items-center ${
-              state.currShapeType === 'image' ? 'bg-stone-800' : ''
-            }`}
+            class={`mt-0.5 flex h-9 items-center gap-2 rounded-lg px-3 ${chromeSurface}`}
+            aria-live="polite"
           >
-            <input
-              type="file"
-              onChange$={handleFileInput}
-              class="appearance-none absolute max-w-full w-full max-h-full h-full left-0 top-0 cursor-pointer opacity-0"
+            <span
+              class="h-2 w-2 shrink-0 rounded-full"
+              style={{ background: state.currShapeType === 'image' ? 'rgb(148, 163, 184)' : state.selectedColor }}
             />
-
-            <ImageFile />
-            <span class="absolute bottom-[-2px] right-[4px] text-[8px] hidden group-hover:block">i</span>
+            <span class="text-xs font-medium tracking-wide text-slate-200">{statusMessage}</span>
           </div>
         </div>
 
-        <div class="absolute top-4 right-4 z-10">
-          <div class="relative text-white">
+        <div class="pointer-events-none absolute bottom-4 left-4 z-10 flex max-w-[calc(100vw-2rem)] flex-wrap items-center gap-2 text-white">
+          <div class={`${clusterClass} pointer-events-auto`} role="group" aria-label="History">
+            <button type="button" aria-label="Undo" title="Undo (⌘Z)" onClick$={onUndo} class={iconButtonClass}>
+              <Undo />
+            </button>
+            <button type="button" aria-label="Redo" title="Redo (⇧⌘Z)" onClick$={onRedo} class={iconButtonClass}>
+              <Redo />
+            </button>
             <button
-              class="px-2 h-8 text-xs border border-slate-700 bg-stone-900 rounded grid place-items-center"
+              type="button"
+              aria-label={clearArmed.value ? 'Confirm clear canvas' : 'Clear canvas'}
+              title={clearArmed.value ? 'Click again to clear' : 'Clear'}
+              class={`${textButtonClass} ${clearArmed.value ? '!border-rose-500/60 !text-rose-200' : ''}`}
+              onClick$={handleClear}
+            >
+              {clearArmed.value ? 'Confirm' : 'Clear'}
+            </button>
+          </div>
+
+          <div class={`${clusterClass} pointer-events-auto`} role="group" aria-label="View">
+            <button
+              type="button"
+              aria-label={`Reset zoom, currently ${(state.scale * 100).toFixed(0)} percent`}
+              title="Reset zoom"
+              class={`${textButtonClass} min-w-[3.25rem] tabular-nums`}
+              onClick$={onResetZoom}
+            >
+              {(state.scale * 100).toFixed(0)}%
+            </button>
+          </div>
+
+          <div class={`${clusterClass} pointer-events-auto gap-0`} role="radiogroup" aria-label="Drawing tools">
+            {shapeButtons.map(({ icon, shape, shortcut, label }) => {
+              const isActive = state.currShapeType === shape
+              return (
+                <button
+                  key={shape}
+                  type="button"
+                  role="radio"
+                  aria-checked={isActive}
+                  aria-label={`${label} tool (${shortcut})`}
+                  title={`${label} (${shortcut.toLowerCase()})`}
+                  class={`relative grid h-9 w-9 place-items-center rounded-lg transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 ${
+                    isActive
+                      ? 'bg-slate-100 text-stone-900 shadow-sm'
+                      : 'text-slate-300 hover:bg-stone-800 hover:text-white'
+                  }`}
+                  onClick$={() => onSelectShapeType(shape)}
+                >
+                  {icon}
+                  <kbd
+                    class={`pointer-events-none absolute bottom-0.5 right-1 text-[10px] font-medium leading-none ${
+                      isActive ? 'text-stone-500' : 'text-slate-500'
+                    }`}
+                  >
+                    {shortcut.toLowerCase()}
+                  </kbd>
+                </button>
+              )
+            })}
+
+            <button
+              type="button"
+              role="radio"
+              aria-checked={state.currShapeType === 'image'}
+              aria-label="Insert image (I)"
+              title="Insert image (i)"
+              class={`relative grid h-9 w-9 place-items-center rounded-lg transition-colors duration-150 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 ${
+                state.currShapeType === 'image'
+                  ? 'bg-slate-100 text-stone-900 shadow-sm'
+                  : 'text-slate-300 hover:bg-stone-800 hover:text-white'
+              }`}
+              onClick$={() => {
+                state.currShapeType = 'image'
+                fileInputRef.value?.click()
+              }}
+            >
+              <ImageFile />
+              <kbd
+                class={`pointer-events-none absolute bottom-0.5 right-1 text-[10px] font-medium leading-none ${
+                  state.currShapeType === 'image' ? 'text-stone-500' : 'text-slate-500'
+                }`}
+              >
+                i
+              </kbd>
+            </button>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange$={handleFileInput}
+              class="sr-only"
+              tabIndex={-1}
+              aria-hidden="true"
+            />
+          </div>
+        </div>
+
+        <div class="pointer-events-none absolute top-4 right-4 z-10">
+          <div class="pointer-events-auto relative text-white">
+            <button
+              type="button"
+              aria-label="Keyboard shortcuts"
+              aria-expanded={state.showKeyShortcuts}
+              title="Keyboard shortcuts"
+              class={`grid h-9 place-items-center rounded-lg px-2.5 text-xs ${chromeSurface} text-slate-200 hover:bg-stone-800 hover:text-white focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-slate-400 transition-colors duration-150`}
               onClick$={() => (state.showKeyShortcuts = !state.showKeyShortcuts)}
             >
-              {state.commandText ? state.commandText : <Keyboard />}
+              <Keyboard />
             </button>
 
             {state.showKeyShortcuts && (
-              <div class="absolute right-0 top-[calc(100%+8px)] px-4 w-max text-xs border border-slate-700 rounded">
+              <div
+                class={`absolute right-0 top-[calc(100%+8px)] w-max rounded-xl px-4 py-1 text-xs ${chromeSurface}`}
+                role="dialog"
+                aria-label="Keyboard shortcuts"
+              >
                 {keyboardCommands.map((shortcut) => (
-                  <span key={`${shortcut.command}-${shortcut.key}`} class="flex justify-between my-3 w-48">
-                    <span>{shortcut.command}</span>
-                    <span class="flex align-center">
+                  <span key={`${shortcut.command}-${shortcut.key}`} class="flex w-52 justify-between my-2.5">
+                    <span class="text-slate-300">{shortcut.command}</span>
+                    <span class="flex items-center">
                       {shortcut.key.split(' ').map((key) => (
                         <kbd
                           key={`${shortcut.command}-${key}`}
-                          class="ml-1 text-[10px] text-xs leading-[110%] py-[4px] px-[3px] min-w-[20px] inline-grid place-items-center text-center rounded bg-stone-700"
+                          class="ml-1 inline-grid min-w-[1.25rem] place-items-center rounded-md bg-stone-800 px-1.5 py-1 text-center text-[11px] leading-none text-slate-200"
                         >
                           {renderShortcutKey(key)}
                         </kbd>

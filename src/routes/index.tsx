@@ -4,6 +4,7 @@ import { type DocumentHead } from '@builder.io/qwik-city'
 import cloneDeep from 'lodash.clonedeep'
 
 import Controls from '~/components/Controls'
+import ShapeControls from '~/components/ShapeControls'
 
 import styles from './index.css?inline'
 
@@ -59,6 +60,7 @@ export interface State {
   shiftKey: boolean
   altKey: boolean
   showKeyShortcuts: boolean
+  suppressCanvasClick: boolean
 }
 
 interface Point {
@@ -140,6 +142,8 @@ const getResizeCursor = (corner: number, rotate: string) => {
   }
 }
 
+const getShapeFillClass = (shapeType: ShapeType) => `shape__fill ${shapeType === 'triangle' ? 'shape__fill--triangle' : ''}`
+
 export default component$(() => {
   useStylesScoped$(styles)
 
@@ -171,6 +175,7 @@ export default component$(() => {
       shiftKey: false,
       altKey: false,
       showKeyShortcuts: false,
+      suppressCanvasClick: false,
     },
     { deep: true }
   )
@@ -400,9 +405,14 @@ export default component$(() => {
       const { canvasX: leftX, canvasY: topY } = await screenToCanvas(clientX, clientY)
       const { canvasX: rightX, canvasY: bottomY } = await screenToCanvas(releaseX, releaseY)
 
-      if (mouseMoved) await drawShape({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
-      else state.selectedShape = undefined
+      if (mouseMoved) {
+        state.suppressCanvasClick = true
+        await drawShape({ fillColor: state.selectedColor, leftX, topY, rightX, bottomY })
+      } else {
+        state.selectedShape = undefined
+      }
     } else if (transformedShape) {
+      state.suppressCanvasClick = true
       saveState()
     }
 
@@ -417,7 +427,7 @@ export default component$(() => {
     handleCanvasRelease(clientX, clientY)
   })
 
-  const previewStyle = useResource$<Record<string, string> | undefined>(async ({ track }) => {
+  const previewShape = useResource$<{ style: Record<string, string>; type: ShapeType } | undefined>(async ({ track }) => {
     const canvasMouseDownCoords = track(() => state.canvasMouseDownCoords)
     const canvasMouseMoveCoords = track(() => state.canvasMouseMoveCoords)
 
@@ -434,12 +444,15 @@ export default component$(() => {
     const coords = await correctRectangleDirection({ leftX, topY, rightX, bottomY })
 
     return {
-      '--left': `${coords.leftX}px`,
-      '--top': `${coords.topY}px`,
-      '--height': `${Math.abs(coords.bottomY - coords.topY)}px`,
-      '--width': `${Math.abs(coords.rightX - coords.leftX)}px`,
-      '--background': state.selectedColor,
-      '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+      type: state.currShapeType,
+      style: {
+        '--left': `${coords.leftX}px`,
+        '--top': `${coords.topY}px`,
+        '--height': `${Math.abs(coords.bottomY - coords.topY)}px`,
+        '--width': `${Math.abs(coords.rightX - coords.leftX)}px`,
+        '--background': state.currShapeType === 'triangle' ? 'transparent' : state.selectedColor,
+        '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+      },
     }
   })
 
@@ -556,13 +569,20 @@ export default component$(() => {
         drawShape={drawShape}
         screenToCanvas={screenToCanvas}
       />
+      <ShapeControls selectedShape={state.selectedShape} onCommit={saveState} />
 
       <div
         class="h-screen w-full max-w-screen bg-stone-900 overflow-hidden absolute inset-0 z-0 touch-pan-y touch-pan-x select-none"
         onMouseDown$={handleCanvasMouseDown}
         onMouseMove$={handleCanvasMouseMove}
         onMouseUp$={handleCanvasMouseUp}
-        onClick$={() => (state.selectedShape = undefined)}
+        onClick$={() => {
+          if (state.suppressCanvasClick) {
+            state.suppressCanvasClick = false
+            return
+          }
+          state.selectedShape = undefined
+        }}
         preventdefault:mousedown
         preventdefault:mouseup
       >
@@ -595,10 +615,20 @@ export default component$(() => {
                   '--width': `${width}px`,
                   '--border-radius': shape.borderRadius,
                   '--rotate': shape.rotate,
-                  '--background': shape.fillColor,
+                  '--background': shape.type === 'triangle' || shape.type === 'image' ? 'transparent' : shape.fillColor,
                 }}
               >
                 <div class="h-full w-full relative">
+                  {shape.type !== 'image' && (
+                    <div
+                      class={getShapeFillClass(shape.type)}
+                      style={{
+                        '--background': shape.fillColor,
+                        '--border-radius': shape.borderRadius,
+                      }}
+                    />
+                  )}
+
                   {shape.type === 'image' && (
                     <img
                       src={shape.src}
@@ -609,7 +639,22 @@ export default component$(() => {
 
                   {isSelected && (
                     <>
-                      <span class="h-full w-full absolute" style={{ border: `${1 / state.scale}px solid white` }} />
+                      <span
+                        class={`shape__selection ${
+                          shape.type === 'circle'
+                            ? 'shape__selection--circle'
+                            : shape.type === 'triangle'
+                              ? 'shape__selection--triangle'
+                              : ''
+                        }`}
+                        style={{ '--shape-scale': String(state.scale) }}
+                      >
+                        {shape.type === 'triangle' && (
+                          <svg class="shape__selection-outline" viewBox="0 0 100 100" preserveAspectRatio="none" aria-hidden="true">
+                            <polygon points="50,2 2,98 98,98" />
+                          </svg>
+                        )}
+                      </span>
 
                       {[
                         { top: dotPos, left: dotPos },
@@ -619,8 +664,10 @@ export default component$(() => {
                       ].map((dotLocation, i) => (
                         <span
                           key={i}
+                          data-resize-handle={i}
+                          aria-hidden="true"
                           onMouseDown$={(e) => handleShapeResizeMouseDown(e, i)}
-                          class="absolute"
+                          class="absolute rounded-sm bg-white shadow-sm"
                           style={{
                             height: `${dotSize / state.scale}px`,
                             width: `${dotSize / state.scale}px`,
@@ -631,38 +678,11 @@ export default component$(() => {
                       ))}
 
                       <div
-                        class="absolute top-0 bottom-0 m-auto w-2 h-fit transition-opacity"
-                        style={{
-                          '--slider-width': '8px',
-                          '--slider-height': `clamp(50px, ${height / 2}px, ${(130 + height / 4) * state.scale}px)`,
-                          left: `calc(100% + calc(.75rem * ${1 / state.scale}))`,
-                          scale: `${1 / state.scale}`,
-                          opacity: state.rotateMouseDownCoords ? '0' : '1',
-                        }}
-                      >
-                        <div class="flex justify-center items-center rotate-90 -mb-4">
-                          <input
-                            style={{ minWidth: 'var(--slider-height)' }}
-                            class="selected-shape__range cursor-ns-resize outline-none rounded-full bg-gray-700 appearance-none"
-                            onMouseDown$={(e) => e.stopPropagation()}
-                            type="range"
-                            min="0"
-                            max="50"
-                            step="0.5"
-                            value={parseInt(shape.borderRadius)}
-                            onInput$={(e) => {
-                              shape.borderRadius = `${parseFloat((e.target as HTMLInputElement).value || '0')}%`
-                            }}
-                          />
-                          <output class="text-gray-400 w-4 text-[.65rem] flex items-center justify-between -rotate-90">
-                            {shape.borderRadius}
-                          </output>
-                        </div>
-                      </div>
-
-                      <div
-                        class="slider absolute left-full bottom-full text-gray-500 cursor-grab active:cursor-grabbing"
+                        class="slider absolute left-full bottom-full text-slate-400 cursor-grab active:cursor-grabbing"
                         onMouseDown$={(e) => handleShapeRotateMouseDown(e)}
+                        role="button"
+                        aria-label="Rotate shape"
+                        tabIndex={0}
                       >
                         <div class="relative">
                           <svg
@@ -674,6 +694,7 @@ export default component$(() => {
                             height={`${20 / state.scale}px`}
                             width={`${20 / state.scale}px`}
                             xmlns="http://www.w3.org/2000/svg"
+                            aria-hidden="true"
                           >
                             <path d="M236,184a12,12,0,0,1-24,0A84,84,0,0,0,68.6,124.6L53.11,140H88a12,12,0,0,1,0,24H24a12,12,0,0,1-12-12V88a12,12,0,0,1,24,0v35.16l15.66-15.55A108,108,0,0,1,236,184Z"></path>
                           </svg>
@@ -683,12 +704,13 @@ export default component$(() => {
                               opacity: state.rotateMouseDownCoords ? '1' : '0',
                               rotate: `calc(-1 * ${shape.rotate})`,
                             }}
-                            class="absolute left-full bottom-full text-gray-400 w-4 text-[.65rem] flex items-center justify-between cursor-pointer transition-opacity"
+                            class="absolute left-full bottom-full text-slate-300 min-w-[2.5rem] text-xs tabular-nums flex items-center justify-between cursor-pointer transition-opacity"
+                            title="Reset rotation"
                             onClick$={() => (shape.rotate = '0deg')}
                           >
                             {shape.rotate.includes('rad')
-                              ? `${(parseFloat(shape.rotate) * (180 / Math.PI)).toFixed(1)}º`
-                              : `${parseFloat(shape.rotate).toFixed(1)}º`}
+                              ? `${(parseFloat(shape.rotate) * (180 / Math.PI)).toFixed(0)}°`
+                              : `${parseFloat(shape.rotate).toFixed(0)}°`}
                           </span>
                         </div>
                       </div>
@@ -700,8 +722,22 @@ export default component$(() => {
           })}
 
           <Resource
-            value={previewStyle}
-            onResolved={(styles) => (styles ? <span class="shape absolute" style={styles} /> : <span />)}
+            value={previewShape}
+            onResolved={(preview) =>
+              preview ? (
+                <span class="shape absolute" style={preview.style}>
+                  <div
+                    class={getShapeFillClass(preview.type)}
+                    style={{
+                      '--background': state.selectedColor,
+                      '--border-radius': state.currShapeType === 'circle' ? '50%' : '0px',
+                    }}
+                  />
+                </span>
+              ) : (
+                <span />
+              )
+            }
           />
         </div>
       </div>
